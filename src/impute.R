@@ -5,8 +5,9 @@ impute <- function(df, fun = "mean", classes = NULL, summary = TRUE) {
   ## Check input ##
   stopifnot(inherits(df, "data.frame"),
             fun %in% c("mean", "zero", "class.mean"))
-  if (!is.null(classes)) {
-    stopifnot(length(classes) == nrow(df),
+  if (fun == "class.mean") {
+    stopifnot(!is.null(classes),
+              length(classes) == nrow(df),
               inherits(classes, c("character","factor")))
     if (is.character(classes)) classes <- factor(classes)
   }
