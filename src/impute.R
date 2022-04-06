@@ -69,7 +69,7 @@ impute <- function(df, fun = "mean", classes = NULL, summary = TRUE) {
          class.mean = {
            tab <- array(NA, dim = c(0, ncol(xmis)), dimnames = list(NULL, colnames(xmis)))
            
-           for (i in levels(classes)) {
+           for (i in levels(droplevels(classes))) {
              xmissub <- xmis[classes == i,]
              tmp <- apply(xmissub, MARGIN = 2, FUN = .impute, fun = "mean", simplify = T)
              if (!is.array(tmp)) tmp <- data.frame(t(tmp))
@@ -81,27 +81,28 @@ impute <- function(df, fun = "mean", classes = NULL, summary = TRUE) {
            tab <- tab[rownames(xmis),]
            
            # if a class is entirely NA, use the global mean
-           if (anyNA(tab)) tab <- data.frame(apply(tab, MARGIN = 2, FUN = .impute, fun = "mean"))
+           if (anyNA(tab)) tab <- data.frame(apply(tab, MARGIN = 2, FUN = .impute, fun = "mean"), check.names = F)
            
-           missingness[["imputed"]] <- data.frame(df[,!idx,drop=F], tab)[,on]
+           missingness[["imputed"]] <- data.frame(df[,!idx,drop=F], tab, check.names = F)[,on]
          }
   )
   
   
   ## Get imputation info ##
+  na <- which(apply(xmis, 2, anyNA))
   switch(fun, 
          mean = {
-           mean.imp <- apply(xmis, 2, mean, na.rm = TRUE)
-           missingness[["imputation"]] <- mean.imp
+           mean.imp <- apply(xmis[,na], 2, mean, na.rm = TRUE)
+           missingness[["imputation"]] <- unlist(mean.imp)
          },
          zero = {
-           zero.imp <- rep(0, ncol(xmis))
-           names(zero.imp) <- colnames(xmis)
+           zero.imp <- rep(0, length(na))
+           names(zero.imp) <- names(na)
            missingness[["imputation"]] <- zero.imp
          },
          class.mean = {
            class.mean.imp <- apply(xmis, 2, tapply, classes, mean, na.rm = TRUE)
-           missingness[["imputation"]] <- class.mean.imp
+           missingness[["imputation"]] <- class.mean.imp[,na]
          }
   )
   
