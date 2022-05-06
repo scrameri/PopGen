@@ -1,6 +1,6 @@
 splot <- function(df, x = names(df)[1], y = names(df)[2], flipx = FALSE, flipy = FALSE,
                   xlab = NULL, ylab = NULL, spiderlab = NULL, collab = NULL,
-                  spiderfac = NULL, spider = ifelse(nlevels(spiderfac) > 1, TRUE, FALSE),
+                  spiderfac = NULL, spider = ifelse(nlevels(spiderfac) > 1 | nlevels(df[,spiderfac]) > 1, TRUE, FALSE),
                   spider.size = 1, spider.alpha = 0.8,
                   colfac = spiderfac, points = TRUE, point.size = 3, point.alpha = 1,
                   palette.spider = NULL, palette.col = palette.spider,
@@ -24,21 +24,23 @@ splot <- function(df, x = names(df)[1], y = names(df)[2], flipx = FALSE, flipy =
   # spider.alpha    transparency of spider lines [DEFAULT: 0.8]
   # colfac          df column name of variable used to map colors to [DEFAULT: same as spider variable]
   # points          if TRUE, will draw sample points [DEFAULT: TRUE]
-  # point.size      XX
-  # point.alpha     XX
-  # palette.spider  XX
-  # palette.col     XX
-  # labelfac        XX
+  # point.size      size of sample points [DEFAULT: 3]
+  # point.alpha     transparency of sample points [DEFAULT: 1]
+  # palette.spider  color palette for spider [DEFAULT: adegenet::funky]
+  # palette.col     color palette for samples points [DEFAULT: same as spider color palette]
+  # labelfac        df column name of sample labels variable [DEFAULT: rownames(df)]
   # labels          if TRUE, will draw repulsive point labels (needs ggrepel package) [DEFAULT: FALSE]
-  # label.size      XX
-  # max.overlaps    XX
-  # plot            XX
+  # label.size      size of sample labels [DEFAULT: 2.5]
+  # max.overlaps    passed to ggrepel::geom_text_repel: Exclude text labels that overlap too many things
+  # plot            if TRUE, will print the ggplot [DEFAULT: TRUE]
   
   ## Details
-  # the arguments x, y, spiderfac, colfac and labelfac can also be given as vectors rather than
+  # The arguments x, y, spiderfac, colfac and/or labelfac can also be given as vectors rather than
   # variable names. This is especially useful if a variable to be mapped onto the plot is not
   # contained in the data.frame df. However, in such cases, the arguments xlab, ylab, spiderlab,
-  # and collab must be given.
+  # and/or collab must be given.
+  
+  # The color palettes can be specified as functions or vectors of valid colors.
   
   ## Author: sfcrameri@gmail.com, May 2022  
   
@@ -47,7 +49,8 @@ splot <- function(df, x = names(df)[1], y = names(df)[2], flipx = FALSE, flipy =
   
   # check input
   stopifnot(inherits(df, "data.frame"),
-            is.logical(flipx), is.logical(flipy))
+            is.logical(flipx), is.logical(flipy),
+            is.logical(spider), is.logical(points), is.logical(labels))
   
   # check factors
   if (!is.null(x)) {
