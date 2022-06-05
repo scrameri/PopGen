@@ -14,7 +14,7 @@ impute <- function(df, fun = "mean", classes = NULL, summary = TRUE) {
   
   ## Determine numeric columns
   on <- colnames(df)
-  idx <- sapply(df, class) %in% c("numeric","integer")
+  idx <- sapply(df, base::class) %in% c("numeric","integer")
   xmis <- df[,idx,drop=F]
   
   ## Get missingness summary ##
