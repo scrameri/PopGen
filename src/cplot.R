@@ -11,8 +11,8 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
 
   ## Usage
   # X       data.frame, matrix or projection object of class prcomp, lda, and various related classes (see list of projected)
-  # x       numeric     variable or component to plot on x axis
-  # y       numeric     variable or component to plot on y axis
+  # x       numeric or character    variable name, variable index, or index of component to plot on x axis
+  # y       numeric or character    variable name, variable index, or index of component to plot on y axis
   # flipx   numeric     constant to multiply with x (-1 for flip)
   # flipy   numeric     constant to multiply with y (-1 for flip)
   # zoom    numeric     zoom in (positive) or out (negative). Zero is no zoom.
@@ -29,7 +29,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   # loadings character vector with name(s) of loading matrix or matrices
   # variates character with name of scores matrix
   
-  # author: simon.crameri@usys.ethz.ch, Aug 2021
+  # author: sfcrameri@gmail.com, Jun 2022
   library(ggplot2)
   library(ggrepel)
   library(ggforce)
@@ -44,15 +44,87 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   # check input
   stopifnot(X.class %in% c("data.frame","matrix","umap","Kplsr","MDS","NMDS",projected))
+
+  # determine x and y variables
+  if (X.class %in% c("data.frame","matrix")) {
+    
+    if (length(x) == 1) {
+      stopifnot(x %in% colnames(X),
+                is.numeric(X[,x]))
+      x <- which(colnames(X) == x)
+    } else {
+      stopifnot(identical(nrow(X), length(x)),
+                is.numeric(x))
+      X[,".X"] <- x
+      x <- which(colnames(X) == ".X")
+    }
+    
+    if (length(y) == 1) {
+      stopifnot(y %in% colnames(X),
+                is.numeric(X[,y]))
+      y <- which(colnames(X) == y)
+    } else {
+      stopifnot(identical(nrow(X), length(y)),
+                is.numeric(y))
+      X[,".Y"] <- y
+      y <- which(colnames(X) == ".Y")
+    }
+  }
   
   # factorize character vectors
-  if (!is.null(.colfac)) if (is.character(.colfac)) .colfac <- as.factor(.colfac)
-  if (!is.null(.fillfac)) if (is.character(.fillfac)) .fillfac <- as.factor(.fillfac)
-  if (!is.null(.shapefac)) if (is.character(.shapefac)) .shapefac <- as.factor(.shapefac)
-  if (!is.null(.alphafac)) if (is.character(.alphafac)) .alphafac <- as.factor(.alphafac)
-  if (!is.null(.sizefac)) if (is.character(.sizefac)) .sizefac <- as.factor(.sizefac)
-  if (!is.null(.hullfac)) if (is.character(.hullfac)) .hullfac <- as.factor(.hullfac)
-  if (!is.null(.spiderfac)) if (is.character(.spiderfac)) .spiderfac <- as.factor(.spiderfac)
+  check.fac <- function(fac) {
+    if (!is.null(fac)) {
+      if (is.character(fac)) {
+        if (length(fac) == 1) {
+          if (!X.class %in% c("data.frame","matrix")) {
+            stop("plot factor is a single character, X expected to be matrix-like")
+          }
+          if (!fac %in% colnames(X)) {
+            stop("plot factor is a single character, variable not found in X")
+          }
+          fac <- X[,fac]
+          if (is.character(fac)) {
+            fac <- as.factor(fac)
+          }
+        } else {
+          if (X.class %in% c("data.frame","matrix")) {
+            stopifnot(identical(nrow(X), length(fac)))
+          }
+          fac <- as.factor(fac)
+        }
+      }
+      if (is.numeric(fac)) {
+        if (X.class %in% c("data.frame","matrix")) {
+          stopifnot(identical(nrow(X), length(fac)))
+        }
+        fac <- as.factor(fac)
+      }
+      if (is.factor(fac)) {
+        if (X.class %in% c("data.frame","matrix")) {
+          stopifnot(identical(nrow(X), length(fac)))
+        }
+      }
+      if (is.logical(fac)) {
+        fac <- NULL
+      }
+    }
+    return(fac)
+  }
+  .colfac <- check.fac(.colfac)
+  .fillfac <- check.fac(.fillfac)
+  .shapefac <- check.fac(.shapefac)
+  .alphafac <- check.fac(.alphafac)
+  .sizefac <- check.fac(.sizefac)
+  .hullfac <- check.fac(.hullfac)
+  .spiderfac <- check.fac(.spiderfac)
+  
+  # if (!is.null(.colfac)) if (is.character(.colfac)) .colfac <- as.factor(.colfac)
+  # if (!is.null(.fillfac)) if (is.character(.fillfac)) .fillfac <- as.factor(.fillfac)
+  # if (!is.null(.shapefac)) if (is.character(.shapefac)) .shapefac <- as.factor(.shapefac)
+  # if (!is.null(.alphafac)) if (is.character(.alphafac)) .alphafac <- as.factor(.alphafac)
+  # if (!is.null(.sizefac)) if (is.character(.sizefac)) .sizefac <- as.factor(.sizefac)
+  # if (!is.null(.hullfac)) if (is.character(.hullfac)) .hullfac <- as.factor(.hullfac)
+  # if (!is.null(.spiderfac)) {if (is.character(.spiderfac)) {if (length(.spiderfac) == 1 & all(.spiderfac %in% colnames(X))) {.spiderfac <- X[,.spiderfac] ; if (is.character(.spiderfac)) .spiderfac <- as.factor(.spiderfac) } else {stopifnot(length(.spiderfac) > 1) ; .spiderfac <- as.factor(.spiderfac)}}}
 
   # (re)set points argument
   if (is.null(points)) {
