@@ -1,6 +1,7 @@
 cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                   variates = "X", add = NULL, drop = NULL,
                   .fillfac = NULL, .colfac = NULL, .hullfac = NULL, .spiderfac = NULL, .shapefac = NULL, .alphafac = NULL, .sizefac = NULL,
+                  fill.name = NULL, col.name = NULL, hull.name = NULL, spider.name = NULL, shape.name = NULL, alpha.name = NULL, size.name = NULL, 
                   palette.fill = NULL, palette.col = NULL, palette.hull = NULL, palette.spider = NULL,
                   points = NULL, point.size = 2.5, point.shape = 21, point.alpha = 0.4, point.lwd = 1,
                   labels = FALSE, labels.cex = 2.5, labels.add = labels,
@@ -16,7 +17,9 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   # flipx   numeric     constant to multiply with x (-1 for flip)
   # flipy   numeric     constant to multiply with y (-1 for flip)
   # zoom    numeric     zoom in (positive) or out (negative). Zero is no zoom.
-  # variates character  character string denoting the scores component, if that is a list (e.g. for mixOmics)
+  # variates character  character string denoting the scores component, if that is a list (e.g. for mixOmics).
+  # add     data.frame  new data to be projected to the same plot using the loadings matrix
+  # drop    character  name of rows to drop from the plot
   # .fillfac factor or numeric   Additional variables (numeric or factor) mapped to X
   # .colfac factor or numeric
   # .hullfac factor
@@ -24,10 +27,25 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   # .shapefac factor
   # .alphafac numeric or factor
   # .sizefac numeric or factor
-  # add     data.frame  new data to be projected to the same plot using the loadings matrix
-  # drop    character  name of rows to drop from the plot
-  # loadings character vector with name(s) of loading matrix or matrices
-  # variates character with name of scores matrix
+  # X.name [X %in% c("fill","col","hull","spider","shape","alpha","size")] character (factor legend title) or NULL (no legend title)
+  # pallete.X [X %in% c("fill","col","hull","spider")] factor color palette
+  # points boolean ; draw points if TRUE
+  # point.size/shape/alpha/lwd customize points drawn
+  # labels boolean ; print repelled labels if TRUE (uses ggrepel)
+  # labels.cex customize labels
+  # labels.add boolean ; if TRUE, adds labels of points added via <add> argument
+  # hull boolean ; draw hulls if TRUE
+  # hull.concavity/alpha/expand/labels/labels.cex/legend customize hulls
+  # spider boolean ; draw spiders if TRUE
+  # spider.alpha/lwd customize spiders
+  # biplot boolean ; if TRUE, adds ordination variable loadings as arrows
+  # loadings character vector with name(s) of loading matrix or matrices. Set to "var.load" for dapc objects.
+  # quantile numeric ; value [0,1] denoting the fraction of variables shown as arrows. 0 = all variables. 0.5 = best 50% of variables, 1 = no variables.
+  # f numeric ; variable loading arrow length expansion. 1 (DEFAULT) prevents loadings from sticking out of the plot, higher values make arrows longer
+  # biplot.col/cex/lwd/alpha customize biplot arrows
+  # plot boolean ; if TRUE, prints the ggplot
+  # legend.pos character denoting the position of the legend ("top","left","bottom","right")
+  # legend.size/spacing/key.size customize legend
   
   # author: sfcrameri@gmail.com, Jun 2022
   library(ggplot2)
@@ -82,6 +100,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
           if (!fac %in% colnames(X)) {
             stop("plot factor is a single character, variable not found in X")
           }
+          facname <- fac
           fac <- X[,fac]
           if (is.character(fac)) {
             fac <- as.factor(fac)
@@ -90,6 +109,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
           if (X.class %in% c("data.frame","matrix")) {
             stopifnot(identical(nrow(X), length(fac)))
           }
+          facname <- NULL
           fac <- as.factor(fac)
         }
       }
@@ -97,35 +117,42 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
         if (X.class %in% c("data.frame","matrix")) {
           stopifnot(identical(nrow(X), length(fac)))
         }
-        fac <- as.factor(fac)
+        facname <- NULL
+        #fac <- as.factor(fac)
       }
       if (is.factor(fac)) {
         if (X.class %in% c("data.frame","matrix")) {
           stopifnot(identical(nrow(X), length(fac)))
         }
+        facname <- NULL
       }
       if (is.logical(fac)) {
-        fac <- NULL
+        fac <- facname <- NULL
       }
+    } else {
+      facname <- NULL
     }
-    return(fac)
+    return(list(fac = fac, facname = facname))
   }
-  .colfac <- check.fac(.colfac)
-  .fillfac <- check.fac(.fillfac)
-  .shapefac <- check.fac(.shapefac)
-  .alphafac <- check.fac(.alphafac)
-  .sizefac <- check.fac(.sizefac)
-  .hullfac <- check.fac(.hullfac)
-  .spiderfac <- check.fac(.spiderfac)
+  .colfac <- check.fac(.colfac) ; colfac.name <- .colfac$facname ; .colfac <- .colfac$fac
+  .fillfac <- check.fac(.fillfac) ; fillfac.name <- .fillfac$facname ; .fillfac <- .fillfac$fac
+  .shapefac <- check.fac(.shapefac) ; shapefac.name <- .shapefac$facname ; .shapefac <- .shapefac$fac
+  .alphafac <- check.fac(.alphafac) ; alphafac.name <- .alphafac$facname ; .alphafac <- .alphafac$fac
+  .sizefac <- check.fac(.sizefac) ; sizefac.name <- .sizefac$facname ; .sizefac <- .sizefac$fac
+  .hullfac <- check.fac(.hullfac) ; hullfac.name <- .hullfac$facname ; .hullfac <- .hullfac$fac
+  .spiderfac <- check.fac(.spiderfac) ; spiderfac.name <- .spiderfac$facname ; .spiderfac <- .spiderfac$fac
   
-  # if (!is.null(.colfac)) if (is.character(.colfac)) .colfac <- as.factor(.colfac)
-  # if (!is.null(.fillfac)) if (is.character(.fillfac)) .fillfac <- as.factor(.fillfac)
-  # if (!is.null(.shapefac)) if (is.character(.shapefac)) .shapefac <- as.factor(.shapefac)
-  # if (!is.null(.alphafac)) if (is.character(.alphafac)) .alphafac <- as.factor(.alphafac)
-  # if (!is.null(.sizefac)) if (is.character(.sizefac)) .sizefac <- as.factor(.sizefac)
-  # if (!is.null(.hullfac)) if (is.character(.hullfac)) .hullfac <- as.factor(.hullfac)
-  # if (!is.null(.spiderfac)) {if (is.character(.spiderfac)) {if (length(.spiderfac) == 1 & all(.spiderfac %in% colnames(X))) {.spiderfac <- X[,.spiderfac] ; if (is.character(.spiderfac)) .spiderfac <- as.factor(.spiderfac) } else {stopifnot(length(.spiderfac) > 1) ; .spiderfac <- as.factor(.spiderfac)}}}
-
+  # factor names
+  if (is.null(col.name)) col.name <- colfac.name
+  if (is.null(fill.name)) fill.name <- fillfac.name
+  
+  if (is.null(shape.name)) shape.name <- shapefac.name
+  if (is.null(alpha.name)) alpha.name <- alphafac.name
+  if (is.null(size.name)) size.name <- sizefac.name
+  
+  if (is.null(hull.name)) hull.name <- hullfac.name
+  if (is.null(spider.name)) spider.name <- spiderfac.name  
+  
   # (re)set points argument
   if (is.null(points)) {
     points <- any(c(!is.null(.colfac), !is.null(.fillfac), !is.null(.shapefac), !is.null(.alphafac), !is.null(.sizefac)))
@@ -144,8 +171,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
     ramp <- grDevices::colorRampPalette(c("#A6CEE3","#1F78B4","#B2DF8A",
                                           "#33A02C","#FB9A99","#E31A1C",
                                           "#FDBF6F","#FF7F00","#CAB2D6",
-                                          "#6A3D9A","#FFFF99","#B15928"))
-                               
+                                          "#6A3D9A","#FFFF99","#B15928"))                             
     ramp(n)
   }
   eco <- function(n) {
@@ -397,12 +423,12 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
     if (hull.legend) {
       p <- p +
         scale_fill_manual(values = col.hull) +
-        guides(fill = guide_legend(title = "",
-                                   # title = substitute(.hullfac),
-                                   title.theme = element_text(size = legend.size),
+        guides(fill = guide_legend(title = hull.name,
+                                   # title.theme = element_text(size = legend.size),
                                    # label.position = "bottom",
-                                   override.aes = list(stroke = 0, size = 0, linetype = 0), # does not work!?
-                                   title.position = "top")) # this is ignored?!
+                                   override.aes = list(stroke = 0, size = 0, linetype = 0) # does not work!?
+                                   #title.position = "top"
+                                  ))
     }
  
   }
@@ -430,7 +456,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                                      color = .spiderfac),
                           size = spider.lwd, alpha = spider.alpha,
                           show.legend = TRUE) +
-      scale_color_manual(values = col.spider)
+      scale_color_manual(values = col.spider, name = spider.name)
   }
   
   if (points) {
@@ -596,26 +622,13 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   p <- p +
     lims(x = xlim, y = ylim) +
-    # guides(color = guide_legend(title = substitute(.colfac), title.theme = element_text(size = legend.size),
-    #                             label.position = "bottom",
-    #                             override.aes = list(linetype = 0),
-    #                             title.position = "top"),
-    #        # fill = guide_legend(title = substitute(.fillfac), title.theme = element_text(size = legend.size),
-    #        #                     label.position = "bottom",
-    #        #                     override.aes = list(linetype = 0, shape = 21),
-    #        #                     title.position = "top"),
-    #        alpha = guide_legend(title = substitute(.alphafac), title.theme = element_text(size = legend.size),
-    #                             label.position = "bottom",
-    #                             override.aes = list(linetype = 0),
-    #                             title.position = "top"),
-    #        size = guide_legend(title = substitute(.sizefac), title.theme = element_text(size = legend.size),
-    #                            label.position = "bottom",
-    #                           override.aes = list(linetype = 0),
-    #                           title.position = "top"),
-    #        shape = guide_legend(title = substitute(.shapefac), title.theme = element_text(size = legend.size),
-    #                             label.position = "bottom",
-    #                             override.aes = list(linetype = 0),
-    #                             title.position = "top")) +
+    labs(
+      fill = fill.name,
+      color = if (!is.null(.spiderfac)) spider.name else col.name,
+      shape = shape.name,
+      alpha = alpha.name,
+      size = size.name
+    ) +
     theme_bw() +
     theme(legend.position = legend.pos,
           legend.text = element_text(size = legend.size),
