@@ -1,3 +1,17 @@
+## split function
+split.fun <- function(x, labs, digits, varlen, faclen) {
+  labs <- gsub("<", "\n<", gsub(">", "\n>", gsub(" ", "\n", gsub(":", "\n", labs))))
+  for (i in 1:length(labs)) {
+    
+    # split labs[i] into multiple lines
+    labs[i] <- paste(strwrap(labs[i], width = 10), collapse = "\n")
+    rm(i)
+  }
+  labs
+}
+
+
+## rpart function
 do.rpart <- function(df, fac, nmin = 5, control, plot = TRUE) {
   
   ## helperfunctions
