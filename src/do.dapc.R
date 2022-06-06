@@ -8,7 +8,7 @@ do.dapc <- function(x, grp, center = TRUE, scale = FALSE, n.rep = 100,
   stopifnot(inherits(x, c("data.frame","matrix")),
             identical(length(grp), nrow(x)),
             is.logical(center), is.logical(scale),
-            is.integer(n.rep), n.rep > 0,
+            is.numeric(n.rep), n.rep > 0,
             is.logical(var.contrib), is.logical(var.loadings))
   
   if (!is.factor(grp)) grp <- factor(grp)
