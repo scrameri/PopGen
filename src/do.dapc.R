@@ -20,7 +20,7 @@ do.dapc <- function(x, grp, center = TRUE, scale = FALSE, n.rep = 100,
   # dapc with var.loadings
   dapc <- dapc(x = x, grp = grp,
                scale = scale, center = center, n.da = nlevels(grp)-1,
-               n.pca = as.numeric(n.rep$`Number of PCs Achieving Highest Mean Success`),
+               n.pca = as.numeric(xval$`Number of PCs Achieving Highest Mean Success`),
                var.contrib = var.contrib, var.loadings = var.loadings)
   
   # return results
