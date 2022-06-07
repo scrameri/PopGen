@@ -1,3 +1,29 @@
+## create SpatialPointsDataFrame
+get.sp <- function(df, geovars = c("LongitudeDecimal","LatitudeDecimal"), proj = "+init=epsg:4326") {
+  library(sp)
+  
+  # check input
+  stopifnot(inherits(df, c("matrix","data.frame")),
+            all(geovars %in% colnames(df)))
+  
+  # remove specimens with missing coordinates
+  torm <- which(is.na(df[,geovars[1]]) | is.na(df[,geovars[2]]))
+  if (length(torm) > 0) {
+    rm <- rownames(df[torm,])
+    message("removed ", length(rm), " specimens with missing coordinates: ", paste(rm, collapse = ", "))
+    df <- df[-torm,]
+  }
+  
+  # create SpatialPointsDataFrame
+  sp <- SpatialPointsDataFrame(coords = df[,geovars], data = df,
+                               coords.nrs = which(colnames(df) %in% geovars),
+                               proj4string = sp::CRS(proj))
+  
+  return(sp)
+}
+
+
+## create leaflet map
 get.leaflet <- function(sp, map.layers = NULL, idfac = "ID_Lab", classfac = "Species", layerfac = NULL, popup = c(idfac, classfac, layerfac),
                         link = NULL, radius = 4, opacity = 0.6, jitter.amount = 0.001, print = TRUE,
                         providers = c("OpenStreetMap.Mapnik","Esri.WorldImagery","Esri.WorldTopoMap","Esri.WorldGrayCanvas"),
