@@ -1,3 +1,17 @@
+# # debug
+# x = 1; y = 2; flipx = 1; flipy = 1; zoom = 0;
+# variates = "X"; add = NULL; drop = NULL;
+# .fillfac = NULL; .colfac = NULL; .hullfac = NULL; .spiderfac = NULL; .shapefac = NULL; .alphafac = NULL; .sizefac = NULL;
+# fill.name = NULL; col.name = NULL; hull.name = NULL; spider.name = NULL; shape.name = NULL; alpha.name = NULL; size.name = NULL; 
+# palette.fill = NULL; palette.col = NULL; palette.hull = NULL; palette.spider = NULL;
+# points = NULL; point.size = 2.5; point.shape = 21; point.alpha = 0.4; point.lwd = 1;
+# labels = FALSE; labels.cex = 2.5; labels.add = labels;
+# hull = !is.null(.hullfac); hull.concavity = 100; hull.alpha = 0.2; hull.expand = unit(.15,"cm"); hull.labels = FALSE; hull.labels.cex = 6; hull.legend = TRUE;
+# spider = !is.null(.spiderfac); spider.alpha = 0.8; spider.lwd = 0.5;
+# biplot = FALSE; loadings = NULL; quantile = NULL; f = 1; biplot.col = c("tomato","blue"); biplot.cex = 2.5; biplot.lwd = 0.25; biplot.alpha = 0.5;
+# plot = TRUE; legend.pos = "bottom"; legend.size = 5; legend.spacing = unit(0, "cm"); legend.key.size = unit(0.25, "cm")
+
+# cplot function
 cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                   variates = "X", add = NULL, drop = NULL,
                   .fillfac = NULL, .colfac = NULL, .hullfac = NULL, .spiderfac = NULL, .shapefac = NULL, .alphafac = NULL, .sizefac = NULL,
@@ -9,7 +23,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                   spider = !is.null(.spiderfac), spider.alpha = 0.8, spider.lwd = 0.5,
                   biplot = FALSE, loadings = NULL, quantile = NULL, f = 1, biplot.col = c("tomato","blue"), biplot.cex = 2.5, biplot.lwd = 0.25, biplot.alpha = 0.5,
                   plot = TRUE, legend.pos = "bottom", legend.size = 5, legend.spacing = unit(0, "cm"), legend.key.size = unit(0.25, "cm"), ...) {
-
+  
   ## Usage
   # X       data.frame, matrix or projection object of class prcomp, lda, and various related classes (see list of projected)
   # x       numeric or character    variable name, variable index, or index of component to plot on x axis
@@ -49,8 +63,6 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   # author: sfcrameri@gmail.com, Jun 2022
   library(ggplot2)
-  library(ggrepel)
-  library(ggforce)
   
   ## Check and re-organize input -----------------------------------------------
   
@@ -58,11 +70,11 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   X.class <- sub("^pca$|^spca$|^ipca$|^sipca$|^mixo_pls$|^mixo_spls$|^mixo_plsda$|^mixo_splsda$", "mixOmics", class(X)[1])
   if ("prcomp" %in% class(X)) X.class <- "prcomp"
   if ("dudi" %in% class(X)) X.class <- "dudi"
-  projected <- c("prcomp","princomp","Pca","dudi","Kpca","mixOmics","dapc","glPca","lda","LDA") # "Kplsr")
+  projected <- c("prcomp","princomp","Pca","pcoa","dudi","Kpca","mixOmics","dapc","glPca","lda","LDA") # "Kplsr")
   
   # check input
   stopifnot(X.class %in% c("data.frame","matrix","umap","Kplsr","MDS","NMDS",projected))
-
+  
   # determine x and y variables
   if (X.class %in% c("data.frame","matrix")) {
     
@@ -215,6 +227,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "prcomp" = data.frame(X$x),
               "princomp" = data.frame(X$scores),
               "Pca" = data.frame(X$T),
+              "pcoa" = data.frame(X$vectors),
               "Kpca" = data.frame(X$T),
               "dudi" = data.frame(X$li),
               "mixOmics" = data.frame(X$variates[[variates]]), # $x is same as $variates$X
@@ -234,6 +247,15 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "prcomp" = X$rotation,
               "princomp" = X$loadings,
               "Pca" = X$P,
+              "pcoa" = {
+                if (is.null(X$Y)) {
+                  stop("need to supply the original or rescaled input to PCoA as X$Y when biplot = TRUE")
+                }
+                COV <- cov(x = X$Y, y = scale(S[,c(x,y)]))
+                U <- COV %*% diag((X$values$Eigenvalues[c(x,y)]/(nrow(X$Y) - 1))^(-0.5))
+                colnames(U) <- colnames(COV)
+                U
+              },
               "Kpca" = X$P,
               "dudi" = {
                 L <- X$c1
@@ -261,7 +283,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               },
               "glPca" = {
                 if (!is.null(X$loadings)) L <- X$loadings else L <- NULL
-                },
+              },
               "lda" = X$scaling,
               "LDA" = X$mod$scaling,
               "Kplsr" = NULL,
@@ -284,6 +306,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "prcomp" = X$sdev^2 / sum(X$sdev^2),
               "princomp" = X$sdev^2 / sum(X$sdev^2),
               "Pca" = X$eig / sum(X$eig),
+              "pcoa" = X$values$Rel_corr_eig,
               "dudi" = X$eig / sum(X$eig),
               "Kpca" = X$eig / sum(X$eig),
               "mixOmics" = X$prop_expl_var[[variates]],
@@ -303,6 +326,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "prcomp" = "PC",
               "princomp" = "PC",
               "Pca" = "PC",
+              "pcoa" = "PCo",
               "dudi" = sub("[0-9 ]+", "", colnames(S)),
               "Kpca" = "KPC",
               "mixOmics" = unique(sub("[0-9 ]+", "", colnames(S))),
@@ -313,7 +337,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "Kplsr" = "LV",
               "MDS" = "MDS",
               "NMDS" = "MDS")
-
+  
   compname <- function(X, x, class = X.class, v = NULL) {
     if (class %in% c("data.frame","matrix")) {
       n[x]
@@ -399,8 +423,10 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
          # fill = fillname,
          fill = "",
          color = "", alpha = "", size = "", shape = "")
-          
+  
   if (hull) {
+    
+    library(ggforce)
     
     col.hull <- palette.hull(nlevels(.hullfac))[which(levels(.hullfac) %in% unique(.hullfac))]
     
@@ -428,9 +454,9 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                                    # label.position = "bottom",
                                    override.aes = list(stroke = 0, size = 0, linetype = 0) # does not work!?
                                    #title.position = "top"
-                                  ))
+        ))
     }
- 
+    
   }
   
   if (spider) {
@@ -445,7 +471,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
       colnames(Sc) <- paste0(colnames(S[,c(x,y)]), ".c")
       Sc <- cbind(S[,c(x,y)], Sc)
     }
-
+    
     col.spider <- palette.spider(nlevels(.spiderfac))[which(levels(.spiderfac) %in% unique(.spiderfac))]
     
     p <- p + geom_segment(data = Sc, inherit.aes = FALSE,
@@ -462,7 +488,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   if (points) {
     # cleg = "legend"
     if (!is.null(.shapefac)) point.shape <- NULL
-
+    
     if (!is.null(.colfac) & !is.null(.spiderfac) | !is.null(.fillfac) & !is.null(.hullfac)) {
       need.pckg <- "ggnewscale"
       if (any(!need.pckg %in% installed.packages())) {
@@ -487,7 +513,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
     
     # set dots (point.size only if .sizefac = NULL, etc. for alpha and shape)
     # dots <- list(...)
-
+    
     if (!is.null(.fillfac) & is.null(.shapefac)) {
       p <- p +
         geom_point(inherit.aes = FALSE,
@@ -555,7 +581,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
       # subset top-quantile arrows
       darr <- data.frame(x = a[,1]*f, y = a[,2]*f, row.names = rownames(a))
     }
-
+    
     # check quantile, f, biplot.cex, biplot.col
     if (length(loadings) > 1) {
       if (!is.null(quantile) & length(quantile) == 1) quantile <- rep(quantile, 2)
@@ -567,6 +593,8 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
     }
     
     for (i in loadings) {
+      
+      library(ggrepel)
       
       id <- which(loadings == i)
       
@@ -590,7 +618,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
       ylim <- range(c(ylim, darr$y))
     }
   }
-
+  
   if (add_to_plot) {
     p <- p +
       geom_point(data = Sadd, inherit.aes = FALSE,
@@ -600,15 +628,17 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
     xlim <- range(c(xlim, Sadd[,x]))
     ylim <- range(c(ylim, Sadd[,y]))
   }
-
+  
   if (labels) {
+    library(ggrepel)
     p <- p +
       geom_text_repel(inherit.aes = FALSE,
                       aes_string(x = paste0(n, x), y = paste0(n, y)),
                       label = rownames(S), size = labels.cex, segment.size = 0.2, ...)
   }
-
+  
   if (add_to_plot & labels.add) {
+    library(ggrepel)
     p <- p +
       geom_text_repel(data = Sadd, inherit.aes = FALSE,
                       aes_string(x = paste0(n, x), y = paste0(n, y)),
@@ -641,5 +671,5 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   # return
   invisible(p)
-
+  
 }
