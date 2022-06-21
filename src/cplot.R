@@ -11,7 +11,6 @@
 # biplot = FALSE; loadings = NULL; quantile = NULL; f = 1; biplot.col = c("tomato","blue"); biplot.cex = 2.5; biplot.lwd = 0.25; biplot.alpha = 0.5;
 # plot = TRUE; legend.pos = "bottom"; legend.size = 5; legend.spacing = unit(0, "cm"); legend.key.size = unit(0.25, "cm")
 
-# cplot function
 cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                   variates = "X", add = NULL, drop = NULL,
                   .fillfac = NULL, .colfac = NULL, .hullfac = NULL, .spiderfac = NULL, .shapefac = NULL, .alphafac = NULL, .sizefac = NULL,
@@ -249,8 +248,9 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "Pca" = X$P,
               "pcoa" = {
                 if (is.null(X$Y)) {
-                  stop("need to supply the original or rescaled input to PCoA as X$Y when biplot = TRUE")
+                  stop("If biplot = TRUE, you need to supply the original or rescaled input data.frame to PCoA as X$Y ")
                 }
+                colnames(X$vectors) <- colnames(S) <- paste0("PCo", 1:ncol(X$vectors))
                 COV <- cov(x = X$Y, y = scale(S[,c(x,y)]))
                 U <- COV %*% diag((X$values$Eigenvalues[c(x,y)]/(nrow(X$Y) - 1))^(-0.5))
                 colnames(U) <- colnames(COV)
@@ -326,7 +326,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "prcomp" = "PC",
               "princomp" = "PC",
               "Pca" = "PC",
-              "pcoa" = "Axis.",
+              "pcoa" = "PCo",
               "dudi" = sub("[0-9 ]+", "", colnames(S)),
               "Kpca" = "KPC",
               "mixOmics" = unique(sub("[0-9 ]+", "", colnames(S))),
