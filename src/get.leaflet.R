@@ -7,7 +7,6 @@ get.sp <- function(df, geovars = c("LongitudeDecimal","LatitudeDecimal"), proj =
             all(geovars %in% colnames(df)))
   
   # remove specimens with missing coordinates
-  df <- data.frame(df)
   torm <- which(is.na(df[,geovars[1]]) | is.na(df[,geovars[2]]))
   if (length(torm) > 0) {
     rm <- rownames(df[torm,])
@@ -16,6 +15,7 @@ get.sp <- function(df, geovars = c("LongitudeDecimal","LatitudeDecimal"), proj =
   }
   
   # create SpatialPointsDataFrame
+  df <- data.frame(df)
   sp <- SpatialPointsDataFrame(coords = df[,geovars], data = df,
                                coords.nrs = which(colnames(df) %in% geovars),
                                proj4string = sp::CRS(proj))
