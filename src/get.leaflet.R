@@ -1,10 +1,20 @@
 ## create SpatialPointsDataFrame
-get.sp <- function(df, geovars = c("LongitudeDecimal","LatitudeDecimal"), proj = "+init=epsg:4326") {
+get.sp <- function(df, geovars = NULL, proj = "epsg:4326") {
   library(sp)
   
   # check input
   stopifnot(inherits(df, c("matrix","data.frame")),
             all(geovars %in% colnames(df)))
+  
+  # set default
+  if (is.null(geovars)) {
+    if (all(c("LongitudeDecimal","LatitudeDecimal") %in% colnames(df))) {
+      geovars <- c("LongitudeDecimal","LatitudeDecimal")
+    }
+    if (all(c("x","y") %in% colnames(df))) {
+      geovars <- c("x","y")
+    }
+  }
   
   # remove specimens with missing coordinates
   torm <- which(is.na(df[,geovars[1]]) | is.na(df[,geovars[2]]))
@@ -18,7 +28,7 @@ get.sp <- function(df, geovars = c("LongitudeDecimal","LatitudeDecimal"), proj =
   df <- data.frame(df)
   sp <- SpatialPointsDataFrame(coords = df[,geovars], data = df,
                                coords.nrs = which(colnames(df) %in% geovars),
-                               proj4string = sp::CRS(proj))
+                               proj4string = sp::CRS(paste0("+init=",proj)))
   
   return(sp)
 }
