@@ -53,7 +53,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   # spider.alpha/lwd customize spiders
   # biplot boolean ; if TRUE, adds ordination variable loadings as arrows
   # loadings character vector with name(s) of loading matrix or matrices. Set to "var.load" for dapc objects.
-  # quantile numeric ; value [0,1] denoting the fraction of variables shown as arrows. 0 = all variables. 0.5 = best 50% of variables, 1 = no variables.
+  # quantile numeric ; value [0,1] denoting the fraction of variables shown as arrows. 0 = all variables. 0.5 = best 50% of variables, 1 = no variables. By default, quantile is 0 if there are <= 100 variables, or 0.9 if there are > 100 variables.
   # f numeric ; variable loading arrow length expansion. 1 (DEFAULT) prevents loadings from sticking out of the plot, higher values make arrows longer
   # biplot.col/cex/lwd/alpha customize biplot arrows
   # plot boolean ; if TRUE, prints the ggplot
@@ -69,7 +69,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   X.class <- sub("^pca$|^spca$|^ipca$|^sipca$|^mixo_pls$|^mixo_spls$|^mixo_plsda$|^mixo_splsda$", "mixOmics", class(X)[1])
   if ("prcomp" %in% class(X)) X.class <- "prcomp"
   if ("dudi" %in% class(X)) X.class <- "dudi"
-  projected <- c("prcomp","princomp","Pca","pcoa","dudi","Kpca","mixOmics","dapc","glPca","lda","LDA") # "Kplsr")
+  projected <- c("prcomp","princomp","Pca","pcoa","FAMD","PCAmix","dudi","Kpca","mixOmics","dapc","glPca","lda","LDA") # "Kplsr")
   
   # check input
   stopifnot(X.class %in% c("data.frame","matrix","umap","Kplsr","MDS","NMDS",projected))
@@ -174,7 +174,11 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   # reset loadings argument
   if (is.null(loadings)) {
-    loadings <- c("X","Y","var.load","loadings")
+    loadings <- c("X","Y", # mixOmics
+                  "var.load","loadings", # DAPC
+                  "quanti.var","quali.var", # FAMD
+                  "quanti","quali" # PCAmix
+    )
   }
   
   # reset palette argument
@@ -227,6 +231,8 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = data.frame(X$scores),
               "Pca" = data.frame(X$T),
               "pcoa" = data.frame(X$vectors),
+              "FAMD" = data.frame(X$ind$coord),
+              "PCAmix" = data.frame(X$ind$coord),
               "Kpca" = data.frame(X$T),
               "dudi" = data.frame(X$li),
               "mixOmics" = data.frame(X$variates[[variates]]), # $x is same as $variates$X
@@ -247,14 +253,42 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = X$loadings,
               "Pca" = X$P,
               "pcoa" = {
-                if (is.null(X$Y)) {
+                if (biplot & is.null(X$Y)) {
                   stop("If biplot = TRUE, you need to supply the original or rescaled input data.frame to PCoA as X$Y ")
                 }
-                colnames(X$vectors) <- colnames(S) <- paste0("PCo", 1:ncol(X$vectors))
-                COV <- cov(x = X$Y, y = scale(S[,c(x,y)]))
-                U <- COV %*% diag((X$values$Eigenvalues[c(x,y)]/(nrow(X$Y) - 1))^(-0.5))
-                colnames(U) <- colnames(COV)
+                if (!is.null(X$Y)) {
+                  colnames(X$vectors) <- colnames(S) <- paste0("PCo", 1:ncol(X$vectors))
+                  COV <- cov(x = X$Y, y = scale(S[,c(x,y)]))
+                  U <- COV %*% diag((X$values$Eigenvalues[c(x,y)]/(nrow(X$Y) - 1))^(-0.5))
+                  colnames(U) <- colnames(COV)
+                } else {
+                  U <- NULL
+                }
                 U
+              },
+              "FAMD" = {
+                
+                dqual <- X$call$X[,X$call$type == "n"]
+                dquant <- X$call$X[,!X$call$type %in% "n"]
+                
+                var.quant <- colnames(dquant)
+                var.qual <-  colnames(dqual)
+                
+                load.quant <- X$quanti.var$coord
+
+                ll <- sapply(names(dqual), function(x) levels(dqual[,x]))
+                lev.qual <- unlist(sapply(seq(length(ll)), function(x) {paste(names(ll)[x], ll[[x]], sep = "_")}))
+                load.qual <- X$quali.var$coord
+                rownames(load.qual) <- lev.qual
+                
+                L <- list(quanti.var = load.quant, quali.var = load.qual)
+                L
+              },
+              "PCAmix" = {
+                L <- list(quanti = X$quanti$coord,
+                          quali = X$levels$coord,
+                          qualicontrib = X$quali$contrib)
+                L
               },
               "Kpca" = X$P,
               "dudi" = {
@@ -292,11 +326,11 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   # convert L matrix to list for compatibility with X and Y loadings (mixOmics)
   if (!is.list(L)) {
-    L <- list(L)
-    loadings <- 1
-  } else {
-    loadings <- loadings[loadings %in% names(L)]
+    L <- list(X = L)
+    loadings <- "X"
   }
+  loadings <- loadings[loadings %in% names(L)]
+  
   
   # percent explained variation
   v <- switch(X.class,
@@ -307,6 +341,8 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = X$sdev^2 / sum(X$sdev^2),
               "Pca" = X$eig / sum(X$eig),
               "pcoa" = X$values$Rel_corr_eig,
+              "FAMD" = X$eig[,"percentage of variance"]/100,
+              "PCAmix" = X$eig[,"Proportion"]/100,
               "dudi" = X$eig / sum(X$eig),
               "Kpca" = X$eig / sum(X$eig),
               "mixOmics" = X$prop_expl_var[[variates]],
@@ -327,6 +363,8 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = "PC",
               "Pca" = "PC",
               "pcoa" = "PCo",
+              "FAMD" = "Dim",
+              "PCAmix" = "Dim",
               "dudi" = sub("[0-9 ]+", "", colnames(S)),
               "Kpca" = "KPC",
               "mixOmics" = unique(sub("[0-9 ]+", "", colnames(S))),
@@ -399,6 +437,18 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   if (ncol(S) < 2) x <- y <- 1
   S[,x] <- S[,x]*flipx
   S[,y] <- S[,y]*flipy
+  
+  print(str(L))
+  print(x)
+  print(y)
+  print(loadings)
+  
+  if (biplot) {
+    for (i in seq(length(L))) {
+      L[[i]][,x] <- L[[i]][,x]*flipx
+      L[[i]][,y] <- L[[i]][,y]*flipy
+    }
+  }
   
   # visualize
   xlim <- range(S[,x])
@@ -565,7 +615,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
     add.biplot <- function(L, quantile = NULL, f = 1) {
       # set quantile
       if (is.null(quantile)) {
-        if (nrow(L) > 20) quantile <- 0.9 else quantile <- 0
+        if (nrow(L) > 100) quantile <- 0.9 else quantile <- 0
       }
       
       # scale loadings to scores
