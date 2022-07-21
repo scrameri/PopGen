@@ -1,31 +1,32 @@
-thin.sampling <- function(t.layer, df, lon, lat,
-                          fac, id = rownames(df),
-                          actel = FALSE, dist_thresh = 1E04,
+thin.sampling <- function(df, lon, lat, fac,
+                          t.layer = NULL, id = rownames(df),
+                          actel = FALSE, dist_thresh = 1E04, proj4string = CRS("+init=epsg:4326"),
                           max = 5, criterion = NULL, criterion_thresh = NULL,
                           minimize = FALSE, verbose = TRUE) {
   
   # sfcrameri@gmail.com, Feb 2022
   
   ## Usage
-  # t.layer       TransitionLayer as outputted from actel::transitionLayer
   # df            data.frame with lon, lat, fac columns
   # lon/lat       name of column in df with longitude (lon) / latitude (lat)
   # fac           name of column in df with grouping factor (will be converted to factor)
-  # id            name of column in df with sample identifyer [DEFAULT: rownames]
+  # t.layer       TransitionLayer as outputted from actel::transitionLayer. If NULL, the euclidean distances between individuals is taken.
+  # id            name of column in df with sample identifyer [DEFAULT: rownames(df)]
   # actel         passed to actel::distancesMatrix
-  # dist_tresh    distance threshold in meters. Only a single sample out of a group of samples with distance < dist_thresh is selected [DEFAULT: 10000], except if < max samples exist.
+  # dist_tresh    distance threshold in meters. Only a single sample out of a group of samples with distance < dist_thresh is selected [DEFAULT: 10000].
+  # proj4string   projection string of class CRS-class [DEFAULT: WGS84 = EPSG 4326].
   # max           maximum number of samples selected per group
-  # criterion     name of column in df with criterion to choose from multiple individuals [DEFAULT: NULL = no criterion]
-  # criterion_thresh numeric threshold. Samples not meeting this threshold will not be selected, except if < max samples exist.
-  # minimize      if TRUE, will select samples with a small value of criterion. If FALSE [DEFAULT], will select samples with a large value of criterion.
+  # criterion     name of column in df with criterion to choose from multiple individuals [DEFAULT: NULL = no criterion, in which case the maximum distance is used]
+  # criterion_thresh numeric threshold. Samples will be selected by taking this criterion into account (res$sel) and by applying a strict threshold (res$strict)
+  # minimize      if TRUE, will prioritize/select samples with a small value of criterion. If FALSE [DEFAULT], will prioritize/select samples with a large value of criterion.
   
   # libraries
-  require(actel)
-  require(plyr)
+  # require(plyr)
+  # require(actel) # if t.layer is used
+  # require(sp)    # if t.layer is not used
   
   # check input
-  stopifnot(inherits(t.layer, "TransitionLayer"),
-            inherits(df, "data.frame"),
+  stopifnot(inherits(df, "data.frame"),
             lon %in% colnames(df),
             lat %in% colnames(df),
             fac %in% colnames(df),
@@ -48,6 +49,13 @@ thin.sampling <- function(t.layer, df, lon, lat,
     # make sure NA are interpreted correctly
     NA.char <- c("NA", "", NA)
     df[df[[criterion]] %in% NA.char,criterion] <- NA
+    
+    if (minimize) {
+      df[df[[criterion]] %in% NA,criterion] <- max(df[[criterion]], na.rm = TRUE)
+    } else {
+      df[df[[criterion]] %in% NA,criterion] <- min(df[[criterion]], na.rm = TRUE)
+    }
+
   } else {
     df[,".criterion"] <- 1
     criterion <- ".criterion"
@@ -65,163 +73,166 @@ thin.sampling <- function(t.layer, df, lon, lat,
   # loop over taxa
   if (!is.factor(df[,fac])) df[,fac] <- factor(df[,fac])
   taxa <- levels(df[,fac])
-  res <- dis <- pas <- str <- list()
-  
+  dist <- crit <- dist.max <- dist.crit <- dist.crit.max <- list()
   for (taxon in taxa) {
     
     if (verbose) cat(paste0(taxon, " [", which(taxa == taxon), "/", length(taxa), "]\n"))
     idx <- df[,fac] %in% taxon & !is.na(df[,lon])
     dsub <- df[idx,]
     
-    ## determine samples strictly meeting criterion_thresh
-    if (minimize) {
-      good.strict <- dsub[dsub[,criterion] < criterion_thresh,id]
-    } else {
-      good.strict <- dsub[dsub[,criterion] > criterion_thresh,id]
-    }
-    
-    if (nrow(dsub) <= max) {
-      ## if only one sample exists, this one is chosen
-      sel <- ind <- dsub[,id]
-    } else {
-
-      ## remove samples not meeting criterion_thresh, if enough remain
-      if (minimize) {
-        good <- dsub[dsub[,criterion] < criterion_thresh,id]
-        if (length(good) < max) {
-          good <- dsub[order(dsub[,criterion], decreasing = FALSE),][1:max,id]
-          good <- good[good %in% dsub[,id]]
-        }
-      } else {
-        good <- dsub[dsub[,criterion] > criterion_thresh,id]
-        if (length(good) < max) {
-          good <- dsub[order(dsub[,criterion], decreasing = TRUE),][1:max,id]
-          good <- good[good %in% dsub[,id]]
-        }
-      }
-      dsub <- dsub[dsub[,id] %in% good,]
+    ## determine groups of geographically close samples
+    # if >1 samples exist, they are grouped
+    if (nrow(dsub) > 1) {
       
-      ## if >1 samples exist, they are grouped according to <t.layer> and <dist_thresh>
+      require(plyr)
+      
       # compute distance over resistance (transition) layer
-      dist.mat <- distancesMatrix(t.layer = t.layer, coord.x = lon, coord.y = lat,
-                                  starters = dsub, actel = actel)
+      if (!is.null(t.layer)) {
+        require(actel)
+        stopifnot(inherits(t.layer, "TransitionLayer"))
+        dist.mat <- distancesMatrix(t.layer = t.layer, coord.x = lon, coord.y = lat,
+                                    starters = dsub, actel = actel)
+        
+        # set diagonal to zero
+        dist.mat <- as.matrix(dist.mat)
+        diag(dist.mat) <- 0
+        rownames(dist.mat) <- colnames(dist.mat)
+      } else {
+        library(sp)
+        sp <- SpatialPointsDataFrame(coords = dsub[,c(lon,lat)], data = dsub,
+                                     proj4string =  proj4string)
+        dist.mat <- round(spDists(x = sp, y = sp)*1000) # kilometers in meters
+      }
       rownames(dist.mat) <- colnames(dist.mat) <- dsub[,id]
+      
+      # # test it
+      # dsub <- data.frame(.id = c("A","B","C","D"), data_NIRS_core_hw_Bruker = c(0,1,0,1))
+      # dist.mat <- matrix(c(0,10000,2000,10000,10000,0,8000,12000,2000,8000,0,8000,10000,12000,8000,0), ncol = 4, dimnames = list(c("A","B","C","D"),c("A","B","C","D")))
       
       # fill in dist_thresh for NA values
       if (anyNA(dist.mat)) dist.mat[is.na(dist.mat)] <- dist_thresh
       
-      # get individuals closer than dist_thresh using alply (this always returns a list)
-      ll <- plyr::alply(.data = as.matrix(dist.mat), .margins = 1,
-                        .fun = function(y) {which(y < dist_thresh)}, .expand = FALSE, .dims = TRUE)
-      
-      # reduce redundancy of groups
-      lr <- ll[names(which(!duplicated(ll)))]
-      lr <- lr[order(lengths(lr), decreasing = TRUE)]
-      mid <- sort(table(names(unlist(unname(lr)))), decreasing = TRUE)
-      ind.mid <- names(mid[mid > 2])
-      lr <- lr[!names(lr) %in% ind.mid] # remove "central" samples
-      stopifnot(length(unique(names(unlist(unname(lr))))) == nrow(dsub)) # still all there?
-      
-      # from each group of close individuals, select 1 sample randomly or according to criterion
-      l <- lapply(lr, FUN = function(x) {
-        di <- dsub[match(names(x), dsub[,id]),]
+      # iterate
+      dist.mat.all <- dist.mat
+      # dist.mat <- dist.mat.all
+      repeat{
         
-        if (nrow(di) == 1) {
-          ind <- di[,id]
-        } else {
-          if (!is.null(criterion)) {
-            if (minimize) {
-              ind <- di[which.min(di[,criterion]),id]
-            } else {
-              ind <- di[which.max(di[,criterion]),id]
-            }
+        dim1 <- nrow(dist.mat)
+        # <ll>: list of close individuals using alply (this always returns a list)
+        ll <- plyr::alply(.data = as.matrix(dist.mat), .margins = 1,
+                          .fun = function(y) {names(which(y < dist_thresh))}, .expand = FALSE, .dims = TRUE)
+        ll <- ll[order(lengths(ll), decreasing = FALSE)]
+        
+        ## sort according to criterion
+        lt <- lapply(ll, FUN = function(x) {
+          dgr <- dsub[dsub[,id] %in% x,]
+          if (minimize) {
+            as.character(na.omit(dgr[order(dgr[,criterion], decreasing = FALSE),id]))
           } else {
-            ind <- sample(di[,id], size = 1)
+            as.character(na.omit(dgr[order(dgr[,criterion], decreasing = TRUE),id]))
           }
-        }
-        return(ind)
-      })
-      sel <- unique(unlist(unname(l))) # sel should all meet dist_thresh
-      
-      ## reduce to groups
-      if (sum(!duplicated(ll)) >= max) {
-
-        ## if there are more groups than <max>, select samples according to distance
-        if (length(sel) > max) {
-          smat <- as.matrix(dist.mat[sel,sel])
-          smat[upper.tri(smat)] <- NA
-          diag(smat) <- NA
-          # if (verbose & !min(smat, na.rm = TRUE) > dist_thresh) message("Close individuals detected!")
-          
-          # use the total distance to select one from each cluster
-          cl <- cutree(hclust(as.dist(smat), method = "complete"), k = max)
-          ind <- sapply(1:max, FUN = function(x) names(which.max(rowSums(dist.mat[names(cl[cl==x]),]))))
-          
-          # check
-          stopifnot(identical(as.integer(length(ind)), as.integer(max))) # still enough here?
-          
-          imat <- as.matrix(dist.mat[ind,ind])
-          imat[upper.tri(imat)] <- NA
-          diag(imat) <- NA
-          if (verbose & !min(imat, na.rm = TRUE) > dist_thresh) message("Close individuals detected!")
-          
-          ## old way using large pairwise distances
-          # nmax <- max
-          # repeat{
-          #   nmax <- nmax - 1
-          #   cat("hi\n")
-          #   ismax <- sort(smat, decreasing = TRUE)[1:nmax]
-          #   dmat <- apply(smat, 2, function(x) x %in% ismax)
-          #   ind <- unique(rep(rownames(smat), times = ncol(smat))[c(which(unlist(dmat)), which(unlist(t(dmat))))])
-          #   if (length(ind) <= max) break()
-          # }
-          # stopifnot(identical(as.integer(length(ind)), as.integer(max)))
-          
-          ## use the criterion
-          # di <- dsub[match(sel, dsub[,id]),]
-          # if (!is.null(criterion)) {
-          #   ind <- di[order(di[,criterion], decreasing = !minimize),id]
-          # } else {
-          #   ind <- sample(di[,id], size = max)
-          # }
+        })
         
-        } else {
-          ind <- sel
-        }
-      
-      } else {
+        ## trick: take first of every non-duplicated list element
+        lb <- lt[!duplicated(lt)]
+        ok.dist <- unique(unname(sapply(lb, "[", 1)))
         
-        ## if many samples are < dist_thresh, use the total distance to select one from each cluster
-        cl <- cutree(hclust(as.dist(dist.mat), method = "complete"), k = max)
-        ind <- sapply(1:max, FUN = function(x) names(which.max(rowSums(dist.mat[names(cl[cl==x]),]))))
+        ## check and repeat until dist_thresh is satisfied
+        dist.mat <- dist.mat[ok.dist, ok.dist, drop = FALSE]
+        dim2 <- nrow(dist.mat)
+        dist.check <- dist.mat[lower.tri(dist.mat)]
+        if (!any(dist.check < dist_thresh) | dim1 == dim2) {
+          break()
+        }
+        # print(dim(dist.mat))
       }
+
+    } else {
       
-      # # check on map
-      # dsub$selected <- 0
-      # dsub[dsub[,id] %in% ind,"selected"] <- 1
-      # 
-      # library(leaflet)
-      # sp <- SpatialPointsDataFrame(coords = dsub[c(lon,lat)],
-      #                              data = dsub, proj4string =  CRS(proj.coord))
-      # sp@data[,"Species"] <- droplevels(sp@data[,"Species"])
-      # m <- get.leaflet(sp, map.layers = NULL,
-      #                  idfac = "Collection", classfac = "selected", layerfac = "Species",
-      #                  popup = c("ID.Miseq.orig","ID_Lab","Collection","selected","missingness"),
-      #                  link = "SpecimenID",
-      #                  providers = c("Esri.WorldGrayCanvas","Esri.WorldImagery",
-      #                                "Esri.WorldTopoMap","OpenStreetMap.Mapnik"),
-      #                  print = F)
-      # m
-      # print(ind)
-      
+      # if  1 sample  exists, it is taken
+      if (nrow(dsub) == 1) {
+        ll <- list(dsub[,id])
+        names(ll) <- dsub[,id]
+      } else {
+        # if  0 samples exist, none are taken
+        ll <- list()
+      }
     }
-    res[[taxon]] <- ind
-    str[[taxon]] <- intersect(sel, good.strict)
-    pas[[taxon]] <- good.strict
-    dis[[taxon]] <- sel
-  }
+
+    ## apply <max> using criterion or maximum distance
+    if (is.null(criterion)) {
+      
+      ## <ok.dist.max>: select at most <max> using maximum distance
+      smat <- as.matrix(dist.mat.all[ok.dist,ok.dist])
+      smat[upper.tri(smat)] <- NA
+      diag(smat) <- NA
+      if (verbose & min(smat, na.rm = TRUE) < dist_thresh) message("Close individuals detected!")
+      
+      # use the total distance to select one from each cluster
+      cl <- cutree(hclust(as.dist(smat), method = "complete"), k = min(c(max, nrow(smat))))
+      ok.dist.max <- sapply(1:max, FUN = function(x) names(which.max(rowSums(dist.mat.all[names(cl[cl==x]),,drop=F]))))
+      
+      # check
+      stopifnot(identical(as.integer(length(ok.dist.max)), as.integer(max))) # still enough here?
+      
+    } else {
+      
+      ## <ok.dist.max>: select at most <max> using criterion
+      ddist <- dsub[dsub[,id] %in% ok.dist,]
+      ok.dist.max <- if (minimize) {
+        sort(as.character(na.omit(ddist[order(ddist[,criterion], decreasing = FALSE),][1:max,id])))
+      } else {
+        sort(as.character(na.omit(ddist[order(ddist[,criterion], decreasing = TRUE),][1:max,id])))
+      }
+    }
+    dmax <- dsub[dsub[,id] %in% ok.dist.max,]
+    
+    ## <ok.dist.max.crit>: select subset that also meets criterion_thresh
+    dstrict <- if (minimize) {
+      dsub[dsub[,criterion] <= criterion_thresh,]
+    } else {
+      dsub[dsub[,criterion] >= criterion_thresh,]
+    }
+    ok.crit <- dstrict[,id]
+    
+  
+    # ## check on map
+    # dsub$selected <- 0
+    # dsub[dsub[,id] %in% ok.dist, "selected"] <- 1
+    # 
+    # library(leaflet)
+    # sp <- SpatialPointsDataFrame(coords = dsub[c(lon,lat)],
+    #                              data = dsub, proj4string =  CRS("+init=epsg:4326"))
+    # sp@data[,"Species"] <- droplevels(sp@data[,"Species"])
+    # m <- get.leaflet(sp, map.layers = NULL,
+    #                  idfac = "Collection", colorfac = "selected", layerfac = "Species",
+    #                  popup = c("ID_Lab","Collection","selected",criterion),
+    #                  link = "SpecimenID",
+    #                  providers = c("Esri.WorldGrayCanvas","Esri.WorldImagery",
+    #                                "Esri.WorldTopoMap","OpenStreetMap.Mapnik"),
+    #                  print = F)
+    # m
+    # print(ok.dist)
+  
+  
+    ## bind results  
+    # we have 5 categories
+    # 1) <dist> samples meeting <dist_thresh>, not necessarily also <criterion_thresh> or <max>
+    # 2) <crit> samples meeting <criterion_thresh>, not necessarily also <dist_thresh> or <max>
+    
+    # 3) <dist.max> samples, same as <ok.dist> but downsampled to <max> using <criterion_thresh> (if given) or maximum distance
+    # 4) <dist.crit> samples meeting <dist_thresh> and <criterion_thresh>
+    
+    # 5) <dist.crit.max> samples meeting <dist_thresh> and <criterion_thresh> and <max>
+    
+    dist[[taxon]] <- sort(ok.dist)
+    crit[[taxon]] <- sort(ok.crit)
+    dist.max[[taxon]] <- sort(ok.dist.max)
+    dist.crit[[taxon]] <- sort(intersect(ok.dist, ok.crit))
+    dist.crit.max[[taxon]] <- as.character(na.omit(sort(intersect(ok.dist, ok.crit))[1:max]))
+  } # end for loop over taxa
   
   # return results
-  d.res <- list(selected = res, strict = str, pass_criterion = pas, distant = dis)
+  d.res <- list(dist = dist, crit = crit, dist.max = dist.max, dist.crit = dist.crit, dist.crit.max = dist.crit.max)
   return(d.res)
 }
