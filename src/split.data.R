@@ -1,19 +1,33 @@
-
+# main function
 split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin = 1,
                        drop = NULL, verbose = TRUE) {
 
-  ## simon.crameri@usys.ethz.ch, Aug. 2021
+  ## sfcrameri@gmail.com, Jul. 2022
   
   ## USAGE
   # X           data.frame      complete dataset to be split by rows
   # fac         factor          grouping factor of X (can also be a character string, or a column name of X)
-  # group       character       (optional) column name of X denoting a grouping variable. Rows of the same grouping variable cannot be split into different sets
+  # group       character       (optional) column name of X denoting a grouping variable. Rows of the same grouping variable cannot be split into different sets. Often, this variable contains an identifyer for individuals, in cases where there are multiple samples per individual. If NULL, rows will be split randomly into a training and test set.
   # by          character       (optional) column name of X denoting stratification variable. Rows of the same stratification variable tend to be split into different sets
   # SplitRatio  numeric         desired ratio of samples in training set
-  # nmin        numeric         minimum number of rows per class (if group=NULL) or per group (if group!=NULL) in order to keep that class in training and test sets
-  # drop        character       character string denoting unwanted classes (levels of <fac>), which will not appear in the training or test sets
+  # nmin        numeric         minimum number of rows per grouping factor level (if group=NULL) or per group (if group!=NULL) in order to keep that grouping factor level in training and test sets
+  # drop        character       character string denoting unwanted classes (levels of <fac>), which will not appear in the training or test sets but which will be retained in the new set (see value)
   # verbose     logical         if TRUE, will print summary messages
   
+  ## Value
+  # a list with the following components
+  #Xtrain  # training set (for model fitting / training)
+  #Xtest   # test set (for model validation / evaluation)
+  #Xnew   # new set (additional samples, which may be used to predict the trained or also untrained classes)
+  #
+  #Ytrain # training grouping factor
+  #Ytest  # test set grouping factor
+  #Ynew   # new set grouping factor
+  #
+  #args   # list of split.data() arguments used
+  #
+  #summary # data.frame giving a summary of proportions have eventually been assigned to the training and test sets, for each per grouping factor level
+
   # check
   if (is.character(fac) & length(fac) == 1) {
     stopifnot(fac %in% colnames(X))
