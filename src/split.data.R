@@ -14,20 +14,6 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
   # drop        character       character string denoting unwanted classes (levels of <fac>), which will not appear in the training or test sets but which will be retained in the new set (see value)
   # verbose     logical         if TRUE, will print summary messages
   
-  ## Value
-  # a list with the following components
-  #Xtrain  # training set (for model fitting / training)
-  #Xtest   # test set (for model validation / evaluation)
-  #Xnew   # new set (additional samples, which may be used to predict the trained or also untrained classes)
-  #
-  #Ytrain # training grouping factor
-  #Ytest  # test set grouping factor
-  #Ynew   # new set grouping factor
-  #
-  #args   # list of split.data() arguments used
-  #
-  #summary # data.frame giving a summary of proportions have eventually been assigned to the training and test sets, for each per grouping factor level
-
   # check
   if (is.character(fac) & length(fac) == 1) {
     stopifnot(fac %in% colnames(X))
