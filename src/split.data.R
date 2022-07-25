@@ -6,7 +6,7 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
   
   ## USAGE
   # X           data.frame      complete dataset to be split by rows
-  # fac         factor          grouping factor of X
+  # fac         factor          grouping factor of X (can also be a character string, or a column name of X)
   # group       character       (optional) column name of X denoting a grouping variable. Rows of the same grouping variable cannot be split into different sets
   # by          character       (optional) column name of X denoting stratification variable. Rows of the same stratification variable tend to be split into different sets
   # SplitRatio  numeric         desired ratio of samples in training set
@@ -15,6 +15,13 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
   # verbose     logical         if TRUE, will print summary messages
   
   # check
+  if (is.character(fac) & length(fac) == 1) {
+    stopifnot(fac %in% colnames(X))
+    fac <- X[,fac]
+  }
+  if (is.character(fac)) {
+    fac <- as.factor(fac)
+  }
   stopifnot(inherits(X, c("data.frame","matrix")),
             is.factor(fac), length(fac) == nrow(X),
             is.numeric(SplitRatio), SplitRatio >= 0, SplitRatio <= 1,
