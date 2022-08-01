@@ -438,10 +438,10 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   S[,x] <- S[,x]*flipx
   S[,y] <- S[,y]*flipy
   
-  print(str(L))
-  print(x)
-  print(y)
-  print(loadings)
+  #print(str(L))
+  #print(x)
+  #print(y)
+  #print(loadings)
   
   if (biplot) {
     for (i in seq(length(L))) {
