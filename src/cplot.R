@@ -77,7 +77,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   # determine x and y variables
   if (X.class %in% c("data.frame","matrix")) {
     
-    var.num < names(which(sapply(X, is.numeric)))
+    var.num <- names(which(sapply(X, is.numeric)))
     
     if (length(x) == 1) {
       if (is.numeric(x)) {
