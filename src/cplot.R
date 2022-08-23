@@ -275,7 +275,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                 var.qual <-  colnames(dqual)
                 
                 load.quant <- X$quanti.var$coord
-
+                
                 ll <- sapply(names(dqual), function(x) levels(dqual[,x]))
                 lev.qual <- unlist(sapply(seq(length(ll)), function(x) {paste(names(ll)[x], ll[[x]], sep = "_")}))
                 load.qual <- X$quali.var$coord
@@ -511,8 +511,14 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   
   if (spider) {
     if (is.factor(.spiderfac)) {
-      centroids <- data.frame(apply(X = S[,c(x,y)], MARGIN = 2, FUN = function(x) {tapply(x, INDEX = droplevels(.spiderfac), FUN = mean)}))
+      if (nlevels(droplevels(.spiderfac)) == 1) {
+        centroids <- data.frame(t(data.frame(apply(S[,c(x,y)], MARGIN = 2, FUN = mean))))
+        rownames(centroids) <- levels(droplevels(.spiderfac))
+      } else {
+        centroids <- data.frame(apply(X = S[,c(x,y)], MARGIN = 2, FUN = function(x) {tapply(x, INDEX = droplevels(.spiderfac), FUN = mean)}))
+      }
       colnames(centroids) <- paste0(colnames(centroids), ".c")
+      
       centroids$.spiderfac <- levels(droplevels(.spiderfac))
       Sc <- merge(data.frame(S[,c(x,y)], .spiderfac, id = seq(nrow(S))), centroids, by = ".spiderfac", all = T, sort = F)
       Sc <- Sc[order(Sc$id),]
