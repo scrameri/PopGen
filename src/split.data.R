@@ -1,7 +1,7 @@
 # main function
 split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin = 1,
                        drop = NULL, verbose = TRUE) {
-
+  
   ## sfcrameri@gmail.com, Jul. 2022
   
   ## USAGE
@@ -33,6 +33,7 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
   if (!is.null(by)) {
     stopifnot(is.character(by),
               by %in% colnames(X))
+    X[,by] <- factor(X[,by])
   }
   if (!is.null(drop)) {
     stopifnot(is.character(drop))
@@ -42,10 +43,10 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
   # remove small classes (n < nmin) or classes to be dropped
   if (!is.null(group)) {
     t <- sort(apply(table(fac, X[,group]), 1, function(x) {sum(x>0)}), decreasing = TRUE)
-    names(t[t < nmin])
+    # names(t[t < nmin])
   } else {
     t <- table(fac)
-    names(t[t < nmin])
+    # names(t[t < nmin])
   }
   fac2rm <- unique(c(names(t[t < nmin]), drop))
   X2 <- X[!fac %in% fac2rm,]
@@ -64,7 +65,7 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
     # tabulate <group> and <by> factors
     if (!is.null(by)) {
       if (!is.null(group)) {
-        t <- apply(table(Xcl[,group], Xcl[,by]), 2, as.numeric)
+        t <- apply(table(Xcl[,group], droplevels(Xcl[,by])), 2, as.numeric)
         rownames(t) <- names(table(Xcl[,group]))
       } else {
         # t <- matrix(table(rownames(Xcl), Xcl[,by]), nrow = nrow(Xcl))
@@ -92,7 +93,7 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
       
       r <- (SplitRatio*length(x[x>0])) - 1
       x2 <- names(ct[sample(seq(length(ct)), round(r))])
-
+      
       c(x1, x2)
     })
     
@@ -139,7 +140,7 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
   #          Ytrain <- droplevels(fac2[sample][!train[,group] %in% test[,group]])
   #          Ytest <- droplevels(fac2[!rownames(X2) %in% rownames(dtrain)])
   #        })
-
+  
   # create new set (not in training or validation set)
   dnew <- dtest[!Ytest %in% Ytrain,]
   Ynew <- factor(Ytest[!Ytest %in% Ytrain], levels = levels(fac))
