@@ -1,4 +1,4 @@
-# tidytune wrapper function for streamlined machine learning using various workflows and model specifications
+# tidytune wrapper function for streamlined machine learning using various tidymodels workflows and model specifications
 tidytune <- function(Xtrain, Ytrain, Xtest, Ytest, workflow, tuneGrid, folds,
                      trControl, metrics, metric.best = "accuracy",
                      seed.train = NULL, seed.final = NULL,
@@ -773,4 +773,322 @@ tidytune <- function(Xtrain, Ytrain, Xtest, Ytest, workflow, tuneGrid, folds,
   
   ## Return
   invisible(res)
+}
+
+# tidytune plot methods: plot.tidytune
+plot.tidytune <- function(tidytune, order = NULL,
+                          x.log10 = TRUE, y.log10 = FALSE, mode = "alpha",
+                          point.size = 1, point.alpha = 0.6, line.alpha = 0.6,
+                          plot = TRUE) {
+  
+  require(ggplot2)
+  
+  ## Get components
+  tuneGrid <- tidytune$args$tuneGrid
+  met_train <- if (is_tibble(tidytune$perf.train)) {
+    tidytune$perf.train
+  } else {
+    tidytune$tidyperf.train
+  }
+  bestTune <- tidytune$bestTune
+  pkg_fun <- tidytune$func
+  
+  ## Get order of hyperparameters
+  if (is.null(order)) {
+    hpar <- colnames(tuneGrid) # change order to change mapping
+  } else {
+    stopifnot(all(order %in% colnames(tuneGrid)))
+    if (!all(colnames(tuneGrid) %in% order)) {
+      order <- c(order, colnames(tuneGrid)[!colnames(tuneGrid) %in% order])
+    }
+    hpar <- order
+  }
+  
+  ## Set plot mode
+  switch(mode, 
+         "size" = {
+           cw <- dplyr::case_when(ncol(tuneGrid) == 1 ~ {c("x",NA,NA,NA)},
+                                  ncol(tuneGrid) == 2 ~ {c("x","color",NA,NA)},
+                                  ncol(tuneGrid) == 3 ~ {c("x","color","size",NA)},
+                                  ncol(tuneGrid) >= 4 ~ {c("x","color","size","linetype")})
+         },
+         "alpha" = {
+           cw <- dplyr::case_when(ncol(tuneGrid) == 1 ~ {c("x",NA,NA,NA)},
+                                  ncol(tuneGrid) == 2 ~ {c("x","color",NA,NA)},
+                                  ncol(tuneGrid) == 3 ~ {c("x","color","alpha",NA)},
+                                  ncol(tuneGrid) >= 4 ~ {c("x","color","alpha","linetype")})
+         })
+  
+  ## Plot performance metrics
+  p.nrow <- ceiling(sqrt(dplyr::n_distinct(met_train$.metric)))
+  p <- 
+    met_train %>%
+    dplyr::mutate(across(!!hpar[-c(which(cw == "x"), which(cw == "size!alpha"))], ~ factor(.x))) %>%
+    ggplot(aes_string(x = hpar[1], y = "mean",
+                      color = switch(!is.na(cw[2]),hpar[2],NULL),
+                      linetype = switch(!is.na(cw[4]),hpar[4],NULL)))
+  
+  # add points
+  if (is.na(cw[3])) {
+    p <- p + 
+      geom_point(size = point.size, alpha = point.alpha)
+  } else {
+    switch(mode,
+           "size" = {
+             p <- p +
+               geom_point(aes_string(size = hpar[3]), alpha = point.alpha)
+           },
+           "alpha" = {
+             p <- p +
+               geom_point(aes_string(alpha = hpar[3]), size = point.size)
+           })
+  }
+  
+  # add lines
+  if (is.na(cw[4])) {
+    if (is.na(cw[3])) {
+      gr <- switch(!is.na(cw[2]),hpar[2],NULL)
+    } else {
+      gr <- paste0("interaction(", paste0(c(hpar[2],hpar[3]), collapse =  ", "), ")")
+    }
+    p <- p +
+      geom_line(aes_string(group = gr), alpha = line.alpha)
+  } else {
+    gr <- paste0("interaction(", paste0(c(hpar[2],hpar[3],hpar[4]), collapse =  ", "), ")")
+    p <- p +
+      geom_line(aes_string(group = gr), alpha = line.alpha)
+  }
+  if (y.log10) {
+    p <- p + scale_y_log10(labels = scales::label_number())
+  }
+  if (x.log10) {
+    if (is.numeric(met_train[[hpar[1]]])) {
+      p <- p + scale_x_log10(labels = scales::label_number())
+    } else {
+      message(hpar[1], " not numeric, no log-transformation done!")
+    }
+  }
+  p <- p + 
+    geom_vline(aes(xintercept = bestTune[[hpar[1]]]), linetype = 2) +
+    facet_wrap(~ .metric, scales = "fixed", nrow = p.nrow) +
+    scale_color_viridis_d(option = "plasma", begin = .9, end = 0) +
+    theme_bw() +
+    ggtitle(paste0("Hyperparameter tuning: ", sub("_", "::", pkg_fun)))
+  
+  if (plot) print(p)
+  invisible(p)
+}
+
+print.tidytune <- function(tidytune) {
+  
+  perf.train <- if (is_tibble(tidytune$perf.train)) {
+    tidytune$perf.train
+  } else {
+    tidytune$tidyperf.train
+  }
+  perf.test <- if (is_tibble(tidytune$perf.test)) {
+    tidytune$perf.test
+  } else {
+    tidytune$tidyperf.test
+  }
+  
+  cat("///////  tidytune  ///\n")
+  mprec <- tidytune$mod$pre$actions$recipe$recipe
+  mspec <- tidytune$mod$fit$actions$model$spec
+  print(mprec)
+  cat("\n\n")
+  print(mspec)
+  
+  ntrain <- tidytune$nSplit %>% dplyr::filter(set == "train") %>% dplyr::select("n") %>% as.numeric()
+  ntest <- tidytune$nSplit %>% dplyr::filter(set == "test") %>% dplyr::select("n") %>% as.numeric()
+  ntot <- tidytune$nSplit %>% dplyr::filter(set == "total") %>% dplyr::select("n") %>% as.numeric()
+  
+  ptrn <- paste0("# training samples: ", stringr::str_pad(ntrain, width = 9))
+  ptst <- paste0("# test samples:     ", stringr::str_pad(ntest, width = 9))
+  ptot <- paste0("# total samples:    ", stringr::str_pad(ntot, width = 9))
+  ppar <- paste0("# parameters:       ", stringr::str_pad(tidytune$nX, width = 9))
+  phyp <- paste0("# hyper-par config.:", stringr::str_pad(tidytune$nTune, width = 9))
+  nhyp <- paste(names(tidytune$args$tuneGrid), collapse = " ; ")
+  acc.test <-  perf.test %>% dplyr::filter(.metric == "accuracy") %>% dplyr::select(".estimate")
+  res <- list(spec = mspec,
+              n = list(train = as.numeric(ntrain), test = ntest, total = ntot),
+              p = list(nparam = as.numeric(tidytune$nX), nhyper = as.numeric(tidytune$nTune)),
+              bestTune = as.data.frame(tidytune$bestTune %>% select(!.config)),
+              accuracy = as.numeric(acc.test))
+  
+  cat("> n                             > p\n")
+  cat(paste(ptrn, ppar, sep = "   "), "\n")
+  cat(paste(ptst, phyp, sep = "   "), "\n")
+  cat(paste(ptot, nhyp, sep = "   "),"\n")
+  
+  cat("\n> performance\n")
+  cat(paste0("# test set accuracy:", round(as.numeric(stringr::str_pad(acc.test, width = 9)), 4)), "\n")
+  invisible(res)
+}
+
+summary.tidytune <- function(res) {
+
+  require(yardstick)
+  
+  rec <- res$mod$pre$actions$recipe$recipe
+  mod <- res$mod$fit$actions$model$spec
+  tuneGrid <- res$args$tuneGrid
+  perf.train <- if (is_tibble(res$perf.train)) {
+    res$perf.train
+  } else {
+    res$tidyperf.train
+  }
+  perf.test <- if (is_tibble(res$perf.test)) {
+    res$perf.test
+  } else {
+    res$tidyperf.test
+  }
+  
+  y <- dplyr::filter(rec$var_info, role == "outcome")$variable
+  hpar <- colnames(tuneGrid)
+  fform <- class(mod)[1]
+  engine <- mod$engine
+  transl <- parsnip::translate(mod)
+  pkg_fun <- paste(transl$method$fit$func, collapse = "_")
+  
+  metric.best <- res$args$metric.best
+  mfun <- ifelse(attr(eval(parse(text = metric.best[1])),"direction") == "maximize", max, min)
+  met_meta <- c(".metric",".estimator","mean","n","std_err",".config")
+  
+  tuned <- apply(tuneGrid, 2, function(x) {paste(range(x), collapse = ":")})
+  tuned <- gsub(" ", "", paste0(paste(paste(names(tuned), tuned, sep = "["), collapse = "];"), "]"))
+  
+  best <- res$bestTune %>% dplyr::select(-any_of(met_meta))
+  best <- paste0(paste(paste(names(best), best, sep = "["), collapse = "];"), "]")
+  
+  if (inherits(res$train, "tune_results")) {
+    acc.train <- res$train %>% 
+      tune::show_best(metric = res$args$metric.best, n = 1) %>%
+      dplyr::select(any_of(c(".metric","mean","n","std_err",".set")))
+  } else {
+    acc.train <- res$train$.metrics %>% 
+      dplyr::filter(.metric == res$args$metric.best) %>%
+      dplyr::filter(mean == mfun(mean)) %>%
+      dplyr::select(any_of(c(".metric","mean","n","std_err",".set"))) %>%
+      "["(1,)
+  }
+  acc.train <- acc.train %>% dplyr::rename(!!paste0("Train.", res$args$metric.best) := mean)
+  
+  acc.test <- perf.test %>% dplyr::select(c(".metric",".estimate"))
+  acc.test.head <-t(acc.test)[1,] ; acc.test <- as.numeric(t(acc.test)[2,])
+  acc.test <- array(data = acc.test, dim = c(1,length(acc.test)), dimnames = list(NULL, acc.test.head))
+  acc.test <- tibble::as_tibble(acc.test) %>% dplyr::rename_all(list(function(x) paste0("Test.", x)))
+  
+  dres <- 
+    tibble::tibble(.rows = 1) %>%
+    dplyr::mutate(method = paste(res$fform, sub("_", "::", res$func)),
+           tuned = tuned,
+           best = best) %>%
+    dplyr::bind_cols(acc.train) %>%
+    dplyr::bind_cols(acc.test) %>%
+    dplyr::mutate(ntrain = res$nSplit %>% dplyr::filter(set == "train") %>% dplyr::select("n") %>% as.numeric(),
+           nvar = res$nX,
+           nclass = rec$template %>% dplyr::select(all_of(y)) %>% unlist() %>% nlevels(),
+           nhypercomb = unlist(res$nTune),
+           elapsed = c(res$time$delta, res$time$elapsed),
+           ncpu = res$time$ncpu)
+  return(structure(dres, class = c("summary.tidytune", class(dres))))
+}
+
+predict.tidytune <- function(tidytune, new_data, ...) {
+  
+  # show_model_info(tidytune$fform) # returns NULL
+  predict(tidytune$mod, new_data, ...)
+  
+}
+
+plot.roc <- function(predictions) {
+  require(ggplot2)
+  require(yardstick)
+  y <- names(predictions)[grep("^[.]", names(predictions), invert = TRUE)]
+  predicted <- levels(droplevels(predictions[[y]]))
+  roc <- try(predictions %>%
+               roc_curve(truth = !!y,
+                         estimate = !!(paste(paste0(".pred_", predicted)))),
+             silent = TRUE)
+  autoplot(roc)
+}
+
+
+
+# caret wrapper function for streamlined machine learning using various models as in caret::tune_grid
+# wrapper around caret::train
+caret <- function(Xtrain, Ytrain, Xtest, Ytest, 
+                  method = "rf", preProcess = NULL,
+                  metric = "Accuracy", tuneGrid = expand.grid(.mtry = floor(sqrt(ncol(Xtrain)))),
+                  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 1, search = "grid"),
+                  print = TRUE, plot = TRUE, strip = TRUE, ...) {
+  
+  t1 <- Sys.time()
+  require(caret)
+  
+  # check input
+  stopifnot(inherits(Xtrain, c("data.frame","matrix")),
+            inherits(Xtest, c("data.frame","matrix")),
+            is.factor(Ytrain), is.factor(Ytest),
+            identical(levels(Ytrain), levels(Ytest)),
+            inherits(tuneGrid, "data.frame"),
+            inherits(trControl, "list"))
+  
+  # train
+  trn <- try(train(x = Xtrain, y = Ytrain, method = method, preProcess = preProcess,
+                   metric = metric, tuneGrid = tuneGrid, trControl = trControl, ...), silent = TRUE)
+  
+  # confusion matrices
+  if (inherits(trn, "try-error")) {
+    cat(trn[1])
+    print <- FALSE
+    plot <- FALSE
+    trn <- list(error = paste0("caret::train() gave the following ", trn[1]), results = array(NA, dim = c(1,4)))
+    pred.train <- pred.test <- perf.train <- perf.test <- list(table = NA, positive = NA, overall = NA, byClass = NA)
+  } else {
+    pred.train <- predict(trn, Xtrain)
+    # pred.train <- trn$trainingData$.outcome
+    pred.test <- predict(trn, Xtest)
+    perf.train <- confusionMatrix(pred.train, Ytrain)
+    perf.test  <- confusionMatrix(pred.test, Ytest)
+  }
+
+  # print results
+  if (print) {
+    print(trn)
+    if (nrow(trn$results) > 0) {cat("\nPerformance on resampled training set:\n") ; print(trn$results)}
+    cat("\nPerformance on full training set:\n")  
+    print(perf.train$overall)
+    cat("\nPerformance on test set:\n")
+    print(perf.test$overall)
+  }
+  
+  # plot results
+  if (plot & trControl$method != "none" & nrow(trn$results) > 1) {
+    print(plot(trn))
+  }
+  
+  # stip model
+  if (strip) {
+    # trainingData is already stored in $args$Xtrain
+    trn$trainingData <- NA
+  }  
+  # list of arguments
+  args <- list(Xtrain = Xtrain, Ytrain = Ytrain, Xtest = Xtest, Ytest = Ytest,
+               method = method, preProcess = preProcess, metric = metric,
+               tuneGrid = tuneGrid, trControl = trControl, print = print,
+               plot = plot, strip = strip, dots = list(...))
+  
+  # return results
+  t2 <- Sys.time()
+  res <- list(mod = trn, pred.train = pred.train, pred.test = pred.test, perf.train = perf.train, perf.test = perf.test,
+              args = args, time = list(t1 = t1, t2 = t2, delta = t2 - t1))
+  res <- structure(res, class = "caret")
+  invisible(res)
+}
+
+# plot caret object
+plot.caret <- function(res) {
+  plot(res$mod)
 }
