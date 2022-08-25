@@ -1092,3 +1092,348 @@ caret <- function(Xtrain, Ytrain, Xtest, Ytest,
 plot.caret <- function(res) {
   plot(res$mod)
 }
+
+                                                                     # plot nice confusion matrix (3 options)
+confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatmap = TRUE, title = NULL,
+                    freq = TRUE, n = TRUE, low = "blue", mid = colorRampPalette(c("blue","orange"))(3)[2], 
+                    high = "orange", midpoint = 0.5, filter.rows = NULL, filter.cols = NULL) {
+  
+  ## Author and Date
+  # simon.crameri@usys.ethz.ch, 2021-08-19
+  # performance metrics taken from Max Kuhn's caret::confusionMatrix() function
+  
+  ## Usage
+  # pred          character or factor   containing the predicted classes. Can be a matrix or data.frame of ncol(pred) equalling the number of repetitions during e.g. repeated cross-validation.       
+  # ref           character or factor   containing the true classes.
+  # plot.perf     logical               if TRUE, plots the performance metrics (sensitivity, specificity, precision) [needs ggplot2, caret]
+  # plot.cmat     logical               if TRUE, plots the confusion matrix [needs adegenet]
+  # plot.heatmap  logical               if TRUE, plots the confusion matrix heatmap [needs ggplot2, scales, tidyr, tibble, dplyr]
+  # title         character             suffix for heatmap title
+  # freq          logical               if TRUE, scales the heatmap to frequency rather than number of instances
+  # n             logical               if TRUE, adds each number of instances to the heatmap
+  # low           character             valid R colour (lower end colour in heatmap)
+  # mid           character             valid R colour (mid colour in heatmap)
+  # high          character             valid R colour (upper end colour in heatmap)
+  # midpoint      numeric               definition of midpoint in heatmap colours (depends on <freq>)
+  # filter.rows   character             uses grep(filter.rows, invert = TRUE) to filter out rows from the heatmap. Should match levels in pred/ref
+  # filter.cols   character             uses grep(filter.cols, invert = TRUE) to filter out cols from the heatmap. Should match levels in pred/ref
+  
+  ## Check input
+  stopifnot(inherits(pred, c("character","factor")),
+            inherits(ref, c("character","factor")),
+            is.logical(plot.perf), is.logical(plot.cmat), is.logical(plot.heatmap),
+            is.logical(freq), is.numeric(midpoint))
+  
+  ## Helperfunctions
+  confusion <- function(df, x, y, midpoint = 0.5, na.value = "#00000000", 
+                        xlab = "New identification", ylab = "Previous identification", title.main = "Confusion matrix heatmap", title.sub = "",
+                        freq = TRUE, n = TRUE, low = alpha("black", alpha = 0.25), mid = alpha("black", alpha = 0.5), high = alpha("black", alpha = 1),
+                        quantile = 0, filter.rows = NULL, filter.cols = NULL) {
+    
+    # helperfunctions
+    table.cont <- function(df, var1, var2, freq = TRUE, quantile = 0) {
+      t <- as.matrix(table(df[,var1], df[,var2]))
+      t <- matrix(t, ncol = ncol(t), dimnames = dimnames(t))
+      if (freq) t <- apply(t, 2, function(x) {x/sum(x, na.rm = TRUE)})
+      varsel <- names(which(apply(t, 1, sum, na.rm = TRUE) >= quantile(apply(t, 1, sum, na.rm = TRUE), quantile)))
+      t <- t[varsel,]
+      return(t)
+    }
+    var.heatmap <- function(df, low = muted("red"), mid = "white", high = muted("blue"), limits = NULL,
+                            midpoint = mean(as.matrix(df)), keyname = "",
+                            xlab = FALSE, cex.xlab = 8, col.xlab = 1, ylab = TRUE, cex.ylab = 8, col.ylab = 1,
+                            width = 1, height = 1, bg = "white", na.value = "grey50", plot = TRUE) {
+      
+      ## Arguments
+      
+      # check dependencies
+      needs <- c("tibble","tidyr","dplyr","ggplot2")
+      inst <- which(!needs %in% installed.packages())
+      if (length(inst) > 0) {
+        for (i in inst) {
+          toinst <- readline(prompt = paste0("The <", needs[i], "> package is needed. Do you wish to install it? [y/n]: "))
+          if (toinst == "y") install.packages(needs[i])
+        }
+      }
+      
+      require(ggplot2)
+      require(dplyr)
+      
+      # reshape
+      dd <- tibble::as_tibble(df, rownames = NA) %>% 
+        tibble::rownames_to_column(var = "Y") %>% 
+        tidyr::pivot_longer(cols = -1, names_to = "X", values_to = "Z") %>%
+        dplyr::mutate(X = factor(X, levels = colnames(df))) %>%
+        dplyr::mutate(Y = factor(Y, levels = rev(rownames(df))))
+      
+      p <- ggplot(dd, aes(X, Y, fill = Z)) + 
+        geom_tile(width = width, height = height) +
+        scale_fill_gradient2(low = low, mid = mid, high = high, midpoint = midpoint, na.value = na.value, limits = limits) +
+        labs(x = "", y = "", fill = keyname) +
+        theme_minimal() +
+        theme(axis.text.x = if (xlab) element_text(angle = 90, hjust = 1, vjust = 0.5, size = cex.xlab, colour = col.xlab) else element_blank(), 
+              axis.text.y = if (ylab) element_text(colour = col.ylab, size = cex.ylab) else element_blank(),
+              axis.ticks = element_blank()) #+
+      # scale_x_discrete(position = "top")
+      
+      if (plot) print(p)
+      invisible(p)
+    }
+    
+    # harmonize levels
+    zx <- levels(df[,x])[which(table(df[,x]) == 0)]
+    zy <- levels(df[,y])[which(table(df[,y]) == 0)]
+    df[,x] <- factor(df[,x], levels = levels(df[,x])[!levels(df[,x]) %in% intersect(zx, zy)])
+    df[,y] <- factor(df[,y], levels = levels(df[,y])[!levels(df[,y]) %in% intersect(zx, zy)])
+    
+    # get confusion matrix
+    df.tab <- table.cont(df, var1 = y, var2 = x, freq = freq, quantile = quantile)
+    df.tab[df.tab %in% c(0, NA, NaN)] <- NA
+    
+    # filter zero rows and columns
+    if (!is.null(filter.rows)) {
+      # keep.rows <- apply(df.tab, 1, function(x) !all(is.na(x)))
+      keep.rows <- grep(filter.rows, rownames(df.tab), invert = TRUE)
+      df.tab <- df.tab[keep.rows,]
+    }
+    if (!is.null(filter.cols)) {
+      # keep.cols <- apply(df.tab, 2, function(x) !all(is.na(x)))
+      keep.cols <- grep(filter.cols, colnames(df.tab), invert = TRUE)
+      df.tab <- df.tab[,keep.cols]
+    }
+    
+    # plot confusion matrix
+    p <- var.heatmap(df = df.tab, keyname = ifelse(freq, "Frequency", "Count"),
+                     low = low, mid = mid, high = high, xlab = TRUE,
+                     midpoint = midpoint, width = 0.95, height = 0.95, na.value = na.value, plot = FALSE)
+    p <- p +
+      labs(x = xlab, y = ylab) +
+      geom_abline(slope = -1, intercept = nrow(df.tab) + 1, size = 0.35, colour = "black") +
+      theme(panel.grid.major = element_line(size = c(0.35,0.25,0.25), linetype = c("solid"), colour = c("black","gray50","gray50"))) +
+      ggtitle(label = title.main, subtitle = title.sub) +
+      theme(plot.title = element_text(lineheight = .8, size = rel(1), face = "bold"),
+            plot.subtitle = element_text(size = rel(0.7)))
+    
+    # add text
+    if (is.null(filter.cols) & is.null(filter.rows) & n) {
+      labs <- as.numeric(table(ref = factor(ref, levels = colnames(df.tab)),
+                               pred = factor(pred, levels = rownames(df.tab))))
+      labs[labs == 0] <- NA
+      p <- p + 
+        geom_text(aes(label = labs), na.rm = T)
+    }
+    
+    print(p)
+    invisible(p)
+  }
+  
+  ##############################################################################
+  
+  ## Get confusion matrix/matrices
+  ref1 <- ref
+  if (any(is.matrix(pred) & ncol(pred) > 1, is.data.frame(pred) & ncol(pred) > 1)) {
+    ref2 <- data.frame(array(NA, dim = list(nrow = nrow(pred), ncol = ncol(pred)),
+                             dimnames = list(NULL, paste("rep", 1:ncol(pred)))))
+    for (i in 1:ncol(ref2)) ref2[,i] <- ref1 ; ref <- ref2 
+    confmat <- table(Prediction = factor(pred[,1], levels = levels(ref1)), 
+                     Reference = ref[,1])
+    for (i in 2:ncol(pred)) {
+      ls <- table(Prediction = factor(pred[,1], levels = levels(ref1)), 
+                  Reference = ref[,i])
+      confmat <- confmat + ls
+    }
+  } else {
+    pred <- factor(pred, levels = levels(ref1))
+    confmat <- table(Prediction = pred, Reference = ref1)
+  }
+  
+  ## Calculate overall accuracy/error
+  true <- sum(diag(confmat))
+  false <- sum(confmat)-true
+  error <- paste0(round(100*false/sum(confmat),3), "%")
+  
+  ## Detailed statistics per class
+  refnames <- gsub(" ", "", levels(ref1))
+  d.pred <- data.frame(pred)
+  summary <- array(NA, dim = c(4*nlevels(ref1) + 2, 5), 
+                   dimnames = list(c("Accuracy", "BER", 
+                                     paste0("Precision.", refnames), 
+                                     paste0("Sensitivity.", refnames),
+                                     paste0("Specificity.", refnames),
+                                     paste0("BalancedAccuracy.", refnames)),
+                                   c("metric", "class", "mean", "N", "sd")))
+  
+  # Accuracy and BER
+  if (ncol(d.pred) == 1) {
+    tab <- table(d.pred[,1], ref1)
+    Accuracy <- 1 - (sum(tab) - sum(diag(tab))) / sum(tab)
+    
+    prop.wrong <- sapply(levels(ref1), FUN = function(y) {
+      cl.pred <- d.pred[,1][ref1 == y]
+      sum(cl.pred != y) / length(cl.pred)
+    })
+    BER <- mean(prop.wrong)
+    
+  } else {
+    Accuracy <- apply(d.pred, 2, 
+                      function(x) {
+                        tab <- table(x, ref1)
+                        1 - (sum(tab) - sum(diag(tab))) / sum(tab)
+                      })
+    
+    BER <- apply(d.pred, 2,
+                 function(x) {
+                   prop.wrong <- sapply(levels(ref1), FUN = function(y) {
+                     cl.pred <- x[ref1 == y]
+                     sum(cl.pred != y) / length(cl.pred)
+                   })
+                   mean(prop.wrong)
+                 })
+  }
+  
+  # Precision, Sensitivity, Specificity
+  Precision <- apply(d.pred, 2,
+                     function(x) {
+                       x <- factor(x, levels = levels(ref1))
+                       precision <- numeric()
+                       for (i in levels(ref1)) {
+                         tab <- table(x, ref1 == i)
+                         if (any(ref1 == i)) {
+                           A <- tab[i, "TRUE"]
+                         } else {A <- 0}
+                         B <- tab[i, "FALSE"]
+                         prec <- A / (A+B)
+                         names(prec) <- i
+                         precision <- c(precision, prec)
+                         rm(i)
+                       }
+                       precision
+                     })
+  
+  Sensitivity <- apply(d.pred, 2,
+                       function(x) {
+                         x <- factor(x, levels = levels(ref1))
+                         sensitivity <- numeric()
+                         for (i in levels(ref1)) {
+                           tab <- table(x, ref1 == i)
+                           if (any(ref == i)) {
+                             A <- tab[i, "TRUE"]
+                             C <- sum(tab[which(levels(ref1) != i), "TRUE"])
+                           } else {
+                             A <- C <- 0}
+                           sens <- A / (A+C)
+                           names(sens) <- i
+                           sensitivity <- c(sensitivity, sens)
+                           rm(i)
+                         }
+                         sensitivity
+                       }) 
+  
+  Specificity <- apply(d.pred, 2,
+                       function(x) {
+                         x <- factor(x, levels = levels(ref1))
+                         specificity <- numeric()
+                         for (i in levels(ref1)) {
+                           tab <- table(x, ref1 == i)
+                           B <- tab[i, "FALSE"]
+                           D <- sum(tab[which(levels(ref1) != i), "FALSE"])
+                           spec <- D / (B+D)
+                           names(spec) <- i
+                           specificity <- c(specificity, spec)
+                           rm(i)
+                         }
+                         specificity
+                       })
+  
+  BalancedAccuracy <- (Sensitivity + Specificity) / 2
+  
+  metrics <- c("Accuracy","BER", "Precision", "Sensitivity", "Specificity", "BalancedAccuracy")
+  single <- c("Accuracy","BER")
+  summary <- data.frame(summary)
+  for (i in metrics) {
+    dat <- get(i)
+    xx <- if (i %in% single) i else paste0(i,".", refnames)
+    summary[xx, "metric"] <- i
+    summary[xx, "class"] <- if (i %in% single) i else levels(ref1)
+    summary[xx, "mean"] <- if (i %in% single) mean(dat) else apply(dat, 1, mean)
+    summary[xx, "N"] <- if (i %in% single) length(dat) else apply(dat, 1, length)
+    summary[xx, "sd"] <- if (i %in% single) sd(dat) else apply(dat, 1, sd)
+    rm(i)
+  }
+  
+  ## Save results
+  acc <- 1-false/sum(confmat)
+  res <- list()
+  res[["confmat"]] <- confmat
+  res[["summary"]] <- summary
+  res[["overall.accuracy"]] <- acc
+  res[["overall.accuracy.perc"]] <- paste0(round(100*acc,3), "%")
+  res[["overall.error"]] <- false/sum(confmat)
+  res[["overall.error.perc"]] <- error
+  res[["overall.BER"]] <- summary["BER","mean"]
+  res[["overall.BER.perc"]] <- paste0(round(100*summary["BER","mean"], 3), "%")
+  
+  ## Plot results
+  # stats
+  # get accuracy CI
+  if ("caret" %in% installed.packages()) {
+    cstats <- caret::confusionMatrix(pred, ref)$overall # gives CI
+  } else {
+    cstats <- acc
+    names(cstats) <- "Accuracy"
+  }
+  
+  # subtitle
+  subtitle <- paste0("Accuracy = ", round(cstats["Accuracy"], 3),
+                     ", AccuracyLower = ", round(cstats["AccuracyLower"], 3),
+                     ", AccuracyUpper = ", round(cstats["AccuracyUpper"], 3),
+                     ", AccuracyNull = ", round(cstats["AccuracyNull"], 3),
+                     ", AccuracyPValue = ", round(cstats["AccuracyPValue"], 3),
+                     ", Kappa = ", round(cstats["Kappa"], 3),
+                     ", BER = ", round(summary["BER","mean"], 3))
+  
+  # Performance metrics
+  if (plot.perf) {
+    suppressPackageStartupMessages(require(ggplot2))
+    summary[,"class"] <- factor(summary[,"class"], levels = levels(ref))
+    
+    gplot1 <- ggplot(summary[!summary$metric %in% single,], aes(mean, metric)) +
+      geom_errorbarh(aes(xmin = mean - sd, xmax = mean + sd), height = 0.1) +
+      geom_point(aes(mean)) +
+      facet_wrap(~class) +
+      xlab(ifelse(any(is.matrix(pred), is.data.frame(pred)), "mean +- sd", "mean")) +
+      ylab("performance metric") +
+      ggtitle(label = paste0("Performance metrics by class"),
+              subtitle = subtitle) +
+      theme_bw() +
+      theme(plot.title = element_text(lineheight = .8, size = rel(1), face = "bold"),
+            plot.subtitle = element_text(size = rel(0.7)))
+    
+    suppressWarnings(print(gplot1))
+    res[["plot.perf"]] <- gplot1
+  }
+  if (plot.perf & plot.cmat) suppressWarnings(print(last_plot())) # needed to print gplot1 ???
+  
+  # Confusion matrix (square size proportional to number of instances)
+  if (plot.cmat) {
+    suppressPackageStartupMessages(require(adegenet))
+    table.value(confmat, csize = 1, col.labels = levels(ref1))
+    mtext(paste0("Reference (n = ", length(ref), ")"), side = 3, line = -1, outer = TRUE)
+    mtext(paste0("Predicted (Accuracy = ", round(acc, 3), ")"), side = 4, line = -1, outer = TRUE)
+  }
+  
+  # Confusion heatmap (colour proportional to number / frequency of instances)
+  if (plot.heatmap) {
+    gplot2 <- confusion(df = data.frame(pred = pred, ref = ref), x = "ref", y = "pred", 
+                        xlab = paste0("Reference (n = ", length(ref), ")"), 
+                        ylab = paste0("Predicted (Accuracy = ", round(acc, 3), ")"),
+                        low = low, mid = mid, high = high, midpoint = midpoint, freq = freq,
+                        title.main = if (is.null(title)) paste0("Confusion matrix heatmap") else paste0("Confusion matrix heatmap (", title, ")"),
+                        title.sub = subtitle, filter.rows = filter.rows, filter.cols = filter.cols)
+    res[["plot.heatmap"]] <- gplot2
+  }
+  
+  
+  ## return results
+  invisible(res)
+}
