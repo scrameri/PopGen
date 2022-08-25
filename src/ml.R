@@ -1093,7 +1093,7 @@ plot.caret <- function(res) {
   plot(res$mod)
 }
 
-                                                                     # plot nice confusion matrix (3 options)
+# plot nice confusion matrix (3 options)
 confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatmap = TRUE, title = NULL,
                     freq = TRUE, n = TRUE, low = "blue", mid = colorRampPalette(c("blue","orange"))(3)[2], 
                     high = "orange", midpoint = 0.5, filter.rows = NULL, filter.cols = NULL) {
@@ -1257,9 +1257,9 @@ confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatma
   d.pred <- data.frame(pred)
   summary <- array(NA, dim = c(4*nlevels(ref1) + 2, 5), 
                    dimnames = list(c("Accuracy", "BER", 
-                                     paste0("Precision.", refnames), 
                                      paste0("Sensitivity.", refnames),
                                      paste0("Specificity.", refnames),
+                                     paste0("Precision.", refnames), 
                                      paste0("BalancedAccuracy.", refnames)),
                                    c("metric", "class", "mean", "N", "sd")))
   
@@ -1347,7 +1347,7 @@ confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatma
   
   BalancedAccuracy <- (Sensitivity + Specificity) / 2
   
-  metrics <- c("Accuracy","BER", "Precision", "Sensitivity", "Specificity", "BalancedAccuracy")
+  metrics <- c("Accuracy","BER", "Sensitivity", "Specificity", "Precision", "BalancedAccuracy")
   single <- c("Accuracy","BER")
   summary <- data.frame(summary)
   for (i in metrics) {
@@ -1385,24 +1385,26 @@ confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatma
   
   # subtitle
   subtitle <- paste0("Accuracy = ", round(cstats["Accuracy"], 3),
-                     ", AccuracyLower = ", round(cstats["AccuracyLower"], 3),
-                     ", AccuracyUpper = ", round(cstats["AccuracyUpper"], 3),
-                     ", AccuracyNull = ", round(cstats["AccuracyNull"], 3),
-                     ", AccuracyPValue = ", round(cstats["AccuracyPValue"], 3),
-                     ", Kappa = ", round(cstats["Kappa"], 3),
-                     ", BER = ", round(summary["BER","mean"], 3))
+                     " [", round(cstats["AccuracyLower"], 3), ",", round(cstats["AccuracyUpper"], 3), "]",
+                     # ", AccuracyLower = ", round(cstats["AccuracyLower"], 3),
+                     # ", AccuracyUpper = ", round(cstats["AccuracyUpper"], 3),
+                     # ", AccuracyNull = ", round(cstats["AccuracyNull"], 3),
+                     ", p-Value = ", round(cstats["AccuracyPValue"], 4),
+                     "; Kappa = ", round(cstats["Kappa"], 3),
+                     "; BER = ", round(summary["BER","mean"], 3))
   
   # Performance metrics
   if (plot.perf) {
     suppressPackageStartupMessages(require(ggplot2))
     summary[,"class"] <- factor(summary[,"class"], levels = levels(ref))
-    
-    gplot1 <- ggplot(summary[!summary$metric %in% single,], aes(mean, metric)) +
+    summary[,"metric2"] <- factor(summary[,"metric"], levels = unique(summary[,"metric"]))
+    gplot1 <- ggplot(summary[!summary$metric %in% single,], aes(mean, class)) +
       geom_errorbarh(aes(xmin = mean - sd, xmax = mean + sd), height = 0.1) +
       geom_point(aes(mean)) +
-      facet_wrap(~class) +
+      # facet_wrap(~class) + # if y is mapped to metric2 instead of class
+      facet_wrap(~metric2) +
       xlab(ifelse(any(is.matrix(pred), is.data.frame(pred)), "mean +- sd", "mean")) +
-      ylab("performance metric") +
+      ylab("") +
       ggtitle(label = paste0("Performance metrics by class"),
               subtitle = subtitle) +
       theme_bw() +
