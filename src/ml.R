@@ -1211,8 +1211,14 @@ plot.caret <- function(caret, order = NULL,
   if (plot) print(p)
   invisible(p)
 }
-
-# plot nice confusion matrix (3 options)
+                                                                     
+# print caret
+print.caret <- function(caret) {
+  print(caret$mod)
+}
+                                                                     
+                                                                     
+# plot heatmap-style confusion matrix ()
 confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatmap = TRUE, title = NULL,
                     freq = TRUE, n = TRUE, low = "blue", mid = colorRampPalette(c("blue","orange"))(3)[2], 
                     high = "orange", midpoint = 0.5, filter.rows = NULL, filter.cols = NULL) {
