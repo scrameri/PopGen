@@ -1089,8 +1089,127 @@ caret <- function(Xtrain, Ytrain, Xtest, Ytest,
 }
 
 # plot caret object
-plot.caret <- function(res) {
-  plot(res$mod)
+plot.caret <- function(caret, order = NULL,
+                       x.log10 = TRUE, y.log10 = FALSE, mode = "alpha",
+                       point.size = 1, point.alpha = 0.6, line.alpha = 0.6,
+                       plot = TRUE) {
+  
+  require(ggplot2)
+  require(dplyr)
+  
+  ## Get components
+  tuneGrid <- caret$args$tuneGrid
+  bestTune <- caret$mod$bestTune
+  pkg_fun <- caret$mod$method
+  
+  ## Reshape training $mod$results table (comparable with tidytune()$tidyperf.train) 
+  tuned <- names(tuneGrid)
+  var.sd <- names
+  
+  perf <- names(caret$mod$results)[!names(caret$mod$results) %in% tuned]
+  perf.sd <- perf[grep("SD$", perf)]
+  
+  met_train <- merge(
+    caret$mod$results %>%
+      dplyr::mutate(.id = seq(nrow(caret$mod$results))) %>%
+      tidyr::pivot_longer(cols = all_of(perf), values_to = "mean") %>%
+      dplyr::filter(!name %in% perf.sd) %>%
+      mutate(.merge = name),
+    caret$mod$results %>%
+      dplyr::mutate(.id = seq(nrow(caret$mod$results))) %>%
+      tidyr::pivot_longer(cols = all_of(perf), values_to = "sd") %>%
+      dplyr::filter(name %in% perf.sd) %>%
+      mutate(.merge = sub("SD$", "", name)) %>%
+      select(-all_of(c(tuned,"name"))),
+    by = c(".id", ".merge")
+  ) %>% tibble() %>%
+    select(-all_of(c(".id",".merge"))) %>%
+    rename(.metric = name)
+    
+  ## Get order of hyperparameters
+  if (is.null(order)) {
+    hpar <- colnames(tuneGrid) # change order to change mapping
+  } else {
+    stopifnot(all(order %in% colnames(tuneGrid)))
+    if (!all(colnames(tuneGrid) %in% order)) {
+      order <- c(order, colnames(tuneGrid)[!colnames(tuneGrid) %in% order])
+    }
+    hpar <- order
+  }
+  
+  ## Set plot mode
+  switch(mode, 
+         "size" = {
+           cw <- dplyr::case_when(ncol(tuneGrid) == 1 ~ {c("x",NA,NA,NA)},
+                                  ncol(tuneGrid) == 2 ~ {c("x","color",NA,NA)},
+                                  ncol(tuneGrid) == 3 ~ {c("x","color","size",NA)},
+                                  ncol(tuneGrid) >= 4 ~ {c("x","color","size","linetype")})
+         },
+         "alpha" = {
+           cw <- dplyr::case_when(ncol(tuneGrid) == 1 ~ {c("x",NA,NA,NA)},
+                                  ncol(tuneGrid) == 2 ~ {c("x","color",NA,NA)},
+                                  ncol(tuneGrid) == 3 ~ {c("x","color","alpha",NA)},
+                                  ncol(tuneGrid) >= 4 ~ {c("x","color","alpha","linetype")})
+         })
+  
+  ## Plot performance metrics
+  p.nrow <- ceiling(sqrt(dplyr::n_distinct(met_train$.metric)))
+  p <- 
+    met_train %>%
+    dplyr::mutate(across(!!hpar[-c(which(cw == "x"), which(cw == "size!alpha"))], ~ factor(.x))) %>%
+    ggplot(aes_string(x = hpar[1], y = "mean",
+                      color = switch(!is.na(cw[2]),hpar[2],NULL),
+                      linetype = switch(!is.na(cw[4]),hpar[4],NULL)))
+  
+  # add points
+  if (is.na(cw[3])) {
+    p <- p + 
+      geom_point(size = point.size, alpha = point.alpha)
+  } else {
+    switch(mode,
+           "size" = {
+             p <- p +
+               geom_point(aes_string(size = hpar[3]), alpha = point.alpha)
+           },
+           "alpha" = {
+             p <- p +
+               geom_point(aes_string(alpha = hpar[3]), size = point.size)
+           })
+  }
+  
+  # add lines
+  if (is.na(cw[4])) {
+    if (is.na(cw[3])) {
+      gr <- switch(!is.na(cw[2]),hpar[2],NULL)
+    } else {
+      gr <- paste0("interaction(", paste0(c(hpar[2],hpar[3]), collapse =  ", "), ")")
+    }
+    p <- p +
+      geom_line(aes_string(group = gr), alpha = line.alpha)
+  } else {
+    gr <- paste0("interaction(", paste0(c(hpar[2],hpar[3],hpar[4]), collapse =  ", "), ")")
+    p <- p +
+      geom_line(aes_string(group = gr), alpha = line.alpha)
+  }
+  if (y.log10) {
+    p <- p + scale_y_log10(labels = scales::label_number())
+  }
+  if (x.log10) {
+    if (is.numeric(met_train[[hpar[1]]])) {
+      p <- p + scale_x_log10(labels = scales::label_number())
+    } else {
+      message(hpar[1], " not numeric, no log-transformation done!")
+    }
+  }
+  p <- p + 
+    geom_vline(aes(xintercept = bestTune[[hpar[1]]]), linetype = 2) +
+    facet_wrap(~ .metric, scales = "fixed", nrow = p.nrow) +
+    scale_color_viridis_d(option = "plasma", begin = .9, end = 0) +
+    theme_bw() +
+    ggtitle(paste0("Hyperparameter tuning: ", sub("_", "::", pkg_fun)))
+  
+  if (plot) print(p)
+  invisible(p)
 }
 
 # plot nice confusion matrix (3 options)
