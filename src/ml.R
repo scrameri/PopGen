@@ -1457,7 +1457,7 @@ split.data <- function(X, fac, group = NULL, by = NULL, SplitRatio = 2/3, nmin =
                  args = args, summary = dp))
 }                                                                 
                                                                      
-# plot heatmap-style confusion matrix
+# plot nice confusion matrix (and other model performance plots)
 confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatmap = TRUE, title = NULL,
                     freq = TRUE, n = TRUE, low = "blue", mid = colorRampPalette(c("blue","orange"))(3)[2], 
                     high = "orange", midpoint = 0.5, filter.rows = NULL, filter.cols = NULL) {
@@ -1803,3 +1803,4 @@ confmat <- function(pred, ref, plot.perf = FALSE, plot.cmat = FALSE, plot.heatma
   ## return results
   invisible(res)
 }
+
