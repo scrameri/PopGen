@@ -11,7 +11,7 @@
 # biplot = FALSE; loadings = NULL; quantile = NULL; f = 1; biplot.col = c("tomato","blue"); biplot.cex = 2.5; biplot.lwd = 0.25; biplot.alpha = 0.5;
 # plot = TRUE; legend.pos = "bottom"; legend.size = 5; legend.spacing = unit(0, "cm"); legend.key.size = unit(0.25, "cm")
 
-cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
+function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                   variates = "X", add = NULL, drop = NULL,
                   .fillfac = NULL, .colfac = NULL, .hullfac = NULL, .spiderfac = NULL, .shapefac = NULL, .alphafac = NULL, .sizefac = NULL,
                   fill.name = NULL, col.name = NULL, hull.name = NULL, spider.name = NULL, shape.name = NULL, alpha.name = NULL, size.name = NULL, 
@@ -61,7 +61,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   # legend.size/spacing/key.size customize legend
   
   # author: sfcrameri@gmail.com, Jun 2022
-  library(ggplot2)
+  require(ggplot2)
   
   ## Check and re-organize input -----------------------------------------------
   
@@ -69,7 +69,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
   X.class <- sub("^pca$|^spca$|^ipca$|^sipca$|^mixo_pls$|^mixo_spls$|^mixo_plsda$|^mixo_splsda$", "mixOmics", class(X)[1])
   if ("prcomp" %in% class(X)) X.class <- "prcomp"
   if ("dudi" %in% class(X)) X.class <- "dudi"
-  projected <- c("prcomp","princomp","Pca","pcoa","FAMD","PCAmix","dudi","Kpca","mixOmics","dapc","glPca","lda","LDA") # "Kplsr")
+  projected <- c("prcomp","princomp","Pca","pcoa","PCA","FAMD","PCAmix","dudi","Kpca","mixOmics","dapc","glPca","lda","LDA") # "Kplsr")
   
   # check input
   stopifnot(X.class %in% c("data.frame","matrix","umap","Kplsr","MDS","NMDS",projected))
@@ -239,6 +239,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = data.frame(X$scores),
               "Pca" = data.frame(X$T),
               "pcoa" = data.frame(X$vectors),
+              "PCA" = data.frame(X$ind$coord),
               "FAMD" = data.frame(X$ind$coord),
               "PCAmix" = data.frame(X$ind$coord),
               "Kpca" = data.frame(X$T),
@@ -274,6 +275,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                 }
                 U
               },
+              "PCA" = {X$var$coord},
               "FAMD" = {
                 
                 dqual <- X$call$X[,X$call$type == "n"]
@@ -349,6 +351,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = X$sdev^2 / sum(X$sdev^2),
               "Pca" = X$eig / sum(X$eig),
               "pcoa" = X$values$Rel_corr_eig,
+              "PCA" = X$eig[,"percentage of variance"]/100,
               "FAMD" = X$eig[,"percentage of variance"]/100,
               "PCAmix" = X$eig[,"Proportion"]/100,
               "dudi" = X$eig / sum(X$eig),
@@ -371,6 +374,7 @@ cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
               "princomp" = "PC",
               "Pca" = "PC",
               "pcoa" = "PCo",
+              "PCA" = "PC",
               "FAMD" = "Dim",
               "PCAmix" = "Dim",
               "dudi" = sub("[0-9 ]+", "", colnames(S)),
