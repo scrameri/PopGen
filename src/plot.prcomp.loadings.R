@@ -1,5 +1,5 @@
 plot.prcomp.loadings <- function(prcomp, x = 1, y = 2, flipx = -1, flipy = -1,
-                                 scale = FALSE, scaling = 0.8) {
+                                 cex = 5, scale = FALSE, scaling = 0.8) {
   
   ## Check
   stopifnot(inherits(prcomp, "prcomp"),
@@ -33,7 +33,8 @@ plot.prcomp.loadings <- function(prcomp, x = 1, y = 2, flipx = -1, flipy = -1,
                      y = 0, yend = flipy*rot.scaled[,y]), arrow = arrow()) +
     geom_label(aes(x = flipx*rot.scaled[,x],
                    y = flipy*rot.scaled[,y],
-                   label = rownames(rot.scaled))) +
+                   label = rownames(rot.scaled)),
+              size = cex) +
     labs(x = paste0("PC ", x," (", round(prcomp$expl.var[x], 2), "%)"),
          y = paste0("PC ", y, " (", round(prcomp$expl.var[y], 2), "%)")) +
     theme_bw() +
