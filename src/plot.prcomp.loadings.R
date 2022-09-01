@@ -1,5 +1,5 @@
 plot.prcomp.loadings <- function(prcomp, x = 1, y = 2, flipx = -1, flipy = -1,
-                                 scale = TRUE, scaling = 0.8) {
+                                 scale = FALSE, scaling = 0.8) {
   
   ## Check
   stopifnot(inherits(prcomp, "prcomp"),
