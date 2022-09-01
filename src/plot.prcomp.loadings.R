@@ -29,10 +29,11 @@ plot.prcomp.loadings <- function(prcomp, x = 1, y = 2, flipx = -1, flipy = -1,
   
   ## plot
   p <- ggplot(data.frame(rot.scaled)) +
-    geom_segment(aes(x = 0, xend = flipx*rot.scaled[,x],
-                            y = 0, yend = -flipy*rot.scaled[,y]), arrow = arrow()) +
-    geom_label(aes(x = flipx*rot.scaled[,x], y = flipy*rot.scaled[,y],
-                          label = rownames(rot.scaled))) +
+    geom_segment(aes(x = 0, xend = flipx*rot.scaled[,x],                     
+                     y = 0, yend = flipy*rot.scaled[,y]), arrow = arrow()) +
+    geom_label(aes(x = flipx*rot.scaled[,x],
+                   y = flipy*rot.scaled[,y],
+                   label = rownames(rot.scaled))) +
     labs(x = paste0("PC ", x," (", round(prcomp$expl.var[x], 2), "%)"),
          y = paste0("PC ", y, " (", round(prcomp$expl.var[y], 2), "%)")) +
     theme_bw() +
