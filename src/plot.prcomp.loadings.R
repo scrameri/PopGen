@@ -1,4 +1,4 @@
-plot.prcomp.loadings <- function(prcomp, x = 1, y = 2, flipx = -1, flipy = -1,
+plot.prcomp.loadings <- function(prcomp, x = 1, y = 2, flipx = 1, flipy = 1,
                                  cex = 5, scale = FALSE, scaling = 0.8) {
   
   ## Check
