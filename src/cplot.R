@@ -11,7 +11,7 @@
 # biplot = FALSE; loadings = NULL; quantile = NULL; f = 1; biplot.col = c("tomato","blue"); biplot.cex = 2.5; biplot.lwd = 0.25; biplot.alpha = 0.5;
 # plot = TRUE; legend.pos = "bottom"; legend.size = 5; legend.spacing = unit(0, "cm"); legend.key.size = unit(0.25, "cm")
 
-function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
+cplot <- function(X, x = 1, y = 2, flipx = 1, flipy = 1, zoom = 0,
                   variates = "X", add = NULL, drop = NULL,
                   .fillfac = NULL, .colfac = NULL, .hullfac = NULL, .spiderfac = NULL, .shapefac = NULL, .alphafac = NULL, .sizefac = NULL,
                   fill.name = NULL, col.name = NULL, hull.name = NULL, spider.name = NULL, shape.name = NULL, alpha.name = NULL, size.name = NULL, 
