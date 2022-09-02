@@ -1817,7 +1817,7 @@ train.dakpc <- function(Xtrain, Ytrain, Xtest, Ytest, kern = "krbf",
   
   # list of model info
   info <- list(call = match.call(), mode = "classification",
-               spec = "kpca", engine = "rchemo", pkg_fun = paste0("rchemo_", method),
+               spec = "dakpc", engine = "rchemo", pkg_fun = paste0("rchemo_", "kpca"),
                nSplit = data.frame(set = c("train","test","total"),
                                    n   = c(nrow(Xtrain), nrow(Xtest),
                                            nrow(Xtrain) + nrow(Xtest))),
@@ -1825,13 +1825,13 @@ train.dakpc <- function(Xtrain, Ytrain, Xtest, Ytest, kern = "krbf",
   
   # return results
   t2 <- Sys.time()
-  res <- list(mod = mod$mod, mod.tune = mod,
+  res <- list(mod = mod$mod, mod.tune = mod, info = info, notes = NA,
               pred.train = mod$pred.train, pred.test = mod$pred.test,
               perf.train = mod$perf.train, perf.test = mod$perf.test,
               pca.kern = pca.kern,
               plot = plot.gamma,
               args = args, time = list(t1 = t1, t2 = t2, elapsed = t2 - t1))
-  res <- structure(res, class = "caret") # similar but not identical to true caret class
+  res <- structure(res, class = "caret") # almost
   return(res)
 }
 
