@@ -950,9 +950,9 @@ print.tidytune <- function(tidytune, print.spec = TRUE) {
     cat("\n")
     mprec <- tidytune$mod$pre$actions$recipe$recipe
     mspec <- tidytune$mod$fit$actions$model$spec
-    print(mprec)
+    try(print(mprec), silent = T)
     cat("\n\n")
-    print(mspec)
+    try(print(mspec), silent = T)
     cat("\n")
   }
   
@@ -1058,7 +1058,7 @@ summary.tidytune <- function(tidytune) {
   tuned <- apply(tuneGrid, 2, function(x) {paste(range(x), collapse = ":")})
   tuned <- gsub(" ", "", paste0(paste(paste(names(tuned), tuned, sep = "["), collapse = "];"), "]"))
   
-  best <- tidytune$mod$bestTune %>% dplyr::select(-any_of(met_meta))
+  best <- dplyr::as_tibble(tidytune$mod$bestTune) %>% dplyr::select(-any_of(met_meta))
   best <- paste0(paste(paste(names(best), best, sep = "["), collapse = "];"), "]")
   
   ## compile
@@ -1176,8 +1176,10 @@ plot.caret <- function(caret, order = NULL,
   ## Get components
   tuneGrid <- caret$args$tuneGrid
   bestTune <- caret$mod$bestTune
-  pkg_fun <- if (is.null(caret$mod$modelInfo$fit) & all(c("fm","lev","ni") %in% names(caret$mod))) {
-    switch(class(caret$mod), "Kplsrda" = "rchemo_kplsrda")
+  pkg_fun <- if (!is.null(caret$info$pkg_fun)) {
+    caret$info$pkg_fun
+  } else if (is.null(caret$mod$modelInfo$fit) & all(c("fm","lev","ni") %in% names(caret$mod))) {
+    switch(class(caret$mod)[1], "Kplsrda" = "rchemo_kplsrda")
   } else {
     l <- deparse(caret$mod$modelInfo$fit)
     l <- unlist(strsplit(l[grep("::", l)[1]], split = " "))
@@ -1191,12 +1193,46 @@ plot.caret <- function(caret, order = NULL,
   # <param1> <param2> .metric   mean     sd
   #       1        5   Accuracy 0.524 0.0394
   #       2        6   Kappa    0.479 0.0448
-  met_train <- switch(class(caret$mod),
+  met_train <- switch(class(caret$mod)[1],
                       "Kplsrda" = {
                         tibble(caret$train) %>%
                           mutate(.metric = "Accuracy") %>%
                           mutate(mean = 1-mean) %>% # Accuracy = 1-Error
                           select(-any_of(c("y","n","min","max","se","median","lwr.ci","upr.ci")))
+                      },
+                      "kplsrda" = {
+                        if (identical(caret$args$score, rchemo::err)) {
+                          # old train.kplsrda() with err
+                          tibble(caret$train) %>%
+                            mutate(.metric = "Accuracy") %>%
+                            mutate(mean = 1-mean) %>% # Accuracy = 1-Error
+                            select(-any_of(c("y","n","min","max","se","median","lwr.ci","upr.ci")))
+                        } else if (identical(caret$args$score, rchemo::msep) & "gamma" %in% names(caret$mod$bestTune)) {
+                          # old train.kplsrda() with msep
+                          tibble(caret$train) %>%
+                            group_by(gamma, nlv) %>%
+                            summarize(kern = unique(kern), gamma = unique(gamma),
+                                      nlv = unique(nlv), mean = mean(mean),
+                                      .groups = "keep") %>%
+                            mutate(.metric = "msep") %>%
+                            select(-any_of(c("y","n","min","max","se","median","lwr.ci","upr.ci"))) %>%
+                            ungroup()
+                        } else if (identical(caret$args$score, rchemo::msep) & "sigma" %in% names(caret$mod$bestTune)) {
+                          # old train.kplsrda() with msep
+                          tibble(caret$train) %>%
+                            group_by(sigma, nlv) %>%
+                            summarize(kern = unique(kern), sigma = unique(sigma),
+                                      nlv = unique(nlv), mean = mean(mean),
+                                      .groups = "keep") %>%
+                            mutate(.metric = "msep") %>%
+                            select(-any_of(c("y","n","min","max","se","median","lwr.ci","upr.ci"))) %>%
+                            ungroup()
+                        } else {
+                          # new train.kplsrda() with err that gets translated to accuracy
+                          tibble(caret$train) %>%
+                            mutate(.metric = "Accuracy") %>%
+                            select(-any_of(c("y","n","min","max","se","median","lwr.ci","upr.ci")))
+                        }
                       },
                       "train" = {
                         if (!is.list(caret$mod.tune)) {
@@ -1330,10 +1366,16 @@ plot.caret <- function(caret, order = NULL,
 # print caret
 print.caret <- function(caret, print.spec = TRUE) {
   
-  cat("///////  caret  ///\n")
+  switch(class(caret$mod)[1],
+         "train" = {
+           cat("///////  caret  ///\n")
+         },
+         "kplsrda" = {
+           cat("///////  rchemo  ///\n")
+         })
   if (print.spec) {
     cat("\n")
-    print(caret$mod)
+    try(print(caret$mod),silent=T)
     cat("\n")
   }
   
@@ -1395,8 +1437,10 @@ summary.caret <- function(caret) {
   ## spec
   spec <- caret$mod$modelInfo$label #
   engine <- caret$mod$modelInfo$library #
-  pkg_fun <- if (is.null(caret$mod$modelInfo$fit) & all(c("fm","lev","ni") %in% names(caret$mod))) {
-    switch(class(caret$mod), "Kplsrda" = "rchemo_kplsrda")
+  pkg_fun <- if (!is.null(caret$info$pkg_fun)) {
+    caret$info$pkg_fun
+  } else if (is.null(caret$mod$modelInfo$fit) & all(c("fm","lev","ni") %in% names(caret$mod))) {
+    switch(class(caret$mod)[1], "Kplsrda" = "rchemo_kplsrda")
   } else {
     l <- deparse(caret$mod$modelInfo$fit)
     l <- unlist(strsplit(l[grep("::", l)[1]], split = " "))
@@ -1447,7 +1491,7 @@ summary.caret <- function(caret) {
   tuned <- apply(tuneGrid, 2, function(x) {paste(range(x), collapse = ":")})
   tuned <- gsub(" ", "", paste0(paste(paste(names(tuned), tuned, sep = "["), collapse = "];"), "]"))
   
-  best <- caret$mod$bestTune %>% dplyr::select(-any_of(met_meta))
+  best <- dplyr::as_tibble(caret$mod$bestTune) %>% dplyr::select(-any_of(met_meta))
   best <- paste0(paste(paste(names(best), best, sep = "["), collapse = "];"), "]")
   
   ## compile
@@ -1478,6 +1522,319 @@ predict.caret <- function(caret, new_data, ...) {
   predict(caret$mod, new_data, ...)
   
 }
+
+# wrapper around rchemo::gridcvlv
+train.kplsrda <- function(Xtrain, Ytrain, Xtest, Ytest, method = "kplsrda", kern = "krbf",
+                          tuneGrid = expand.grid(nlv = unique(round(seq(1, nrow(Xtrain), length.out = 100))), gamma = c(0.01,0.1,1,10)),
+                          cv = TRUE, segm = segmkf(n = nrow(Xtrain), type = "random", K = 10, nrep = 3),
+                          score = err, maximize = FALSE, verbose = TRUE, plot = TRUE) {
+  require(rchemo) # gridcvlv
+  require(caret)  # confusionMatrix
+  require(ggplot2)
+  t1 <- Sys.time()
+  
+  # check input
+  fun <- eval(parse(text = method))
+  stopifnot(inherits(Xtrain, c("matrix","data.frame")),
+            inherits(Xtest, c("matrix","data.frame")),
+            is.factor(Ytrain), length(Ytrain) == nrow(Xtrain),
+            is.factor(Ytest), length(Ytest) == nrow(Xtest),is.list(segm),
+            is.function(score), is.logical(maximize), is.function(fun),
+            kern %in% c("krbf","kpol","ktanh"), is.logical(cv), 
+            is.data.frame(tuneGrid), "nlv" %in% names(tuneGrid),
+            is.logical(verbose), is.logical(plot))
+  
+  # get parameter ranges
+  ranges <- apply(tuneGrid, 2, function(x) sort(unique(x)), simplify=F)
+  hranges <- ranges[!names(ranges) == "nlv",drop=F]
+  hGrid <- tuneGrid[,!colnames(tuneGrid) == "nlv",drop=F]
+  hGrid <- hGrid[!duplicated(hGrid),,drop=F]
+  pars <- as.list(data.frame(kern = kern, hGrid)) # pass kern and gamma grid here
+  # pars <- c(pars, list(maxit = rep(1E06, lengths(pars)[1])))
+  
+  # cv
+  if (cv) {
+    # tuning nlv and hyperparameters
+    dd <- rchemo::gridcvlv(X = as.matrix(Xtrain), Y = as.numeric(Ytrain),
+                           segm = segm, score = err,
+                           verb = verbose, fun = fun, nlv = ranges[["nlv"]],
+                           pars = pars)
+    dd.train <- data.frame(summary.by(.data = dd$val_rep, group_by = c("nlv", names(pars)), y = "y1"))
+    
+    # best nlv and hyperparameters
+    selfun <- if (maximize) which.max else which.min
+    dd.best <- dd.train[do.call(what = selfun, args = list(x = dd.train$mean)),]
+    par.best <- sapply(c("nlv", names(pars)[!names(pars) == "kern"]), FUN = function(x) {dd.best[,x]}, simplify = FALSE)
+    nlv.best <- par.best$nlv
+    par.col <- names(par.best[-1])[1]
+    
+    # plot scores
+    p <- ggplot(dd.train) +
+      geom_line(aes_string(x = "nlv", y = "mean", group = par.col, colour = par.col)) +
+      geom_vline(aes(xintercept = nlv.best)) +
+      labs(x = "Number of Components (nlv)", y = paste0(deparse(substitute(score)), "() score")) +
+      theme_bw() +
+      ggtitle(paste0("kern = ", paste0(unique(dd.train$kern), collapse = ",")))
+    
+    if (!all(is.na(dd.train$sd))) {
+      p <- p +
+        geom_ribbon(inherit.aes = T, aes_string(x = "nlv", y = "mean", ymin = "lwr.ci", ymax = "upr.ci", group = par.col), color = NA, alpha = 0.1)
+    }
+    if (plot) {
+      print(p)
+    }
+  } else {
+    res <- list(train = NA, plot = NA)
+    stopifnot(all(lengths(ranges) == 1))
+    dd.train <- p <- NA
+    par.best <- apply(tuneGrid, 2, unique, simplify = FALSE)
+    nlv.best <- par.best$nlv
+  }
+  
+  # fit model on all training data
+  iname <- paste0(paste(paste(names(par.best), as.numeric(unlist(par.best)), sep = "["), collapse = "];"), "]")
+  if (verbose) cat("Fitting", iname, "on full training set\n")
+  mod <- do.call(what = fun, args = c(list(X = as.matrix(Xtrain), y = as.numeric(Ytrain),
+                                           nlv = nlv.best), c(list(kern = kern), par.best[-1])))
+  
+  # add bestTune some class "tune" components (EDIT: predict.tune will not work)
+  mod[["method"]] <- method
+  mod[["modelInfo"]] <- list(label = "KPLSR-DA", library = "rchemo",
+                             loop = NULL, type = "Classification",
+                             parameters = data.frame(parameter = c("nlv","gamma"), class = c("numeric"),
+                                                     label = c("#Latent Variables","Gamma")))
+  mod[["modelType"]] <- "Classification"
+  mod[["results"]] <- dd.train
+  mod[["bestTune"]] <- data.frame(t(unlist(par.best)),check.names=F)
+  mod[["metric"]] <- "Accuracy"
+  mod[["levels"]] <- levels(Ytrain)
+  mod <- structure(mod, class = c("kplsrda", "Kplsrda"))
+  
+  # predict test samples
+  
+  # without predict.kplsrda
+  # pred.train <- factor(levels(Ytrain)[predict(mod, as.matrix(Xtrain))$pred[,1]], levels = levels(Ytrain))
+  # pred.test <- factor(levels(Ytrain)[predict(mod, as.matrix(Xtest))$pred[,1]], levels = levels(Ytrain))
+  
+  # with predict.kplsrda
+  pred.train <- predict(mod, Xtrain)
+  pred.test <- predict(mod, Xtest)
+  
+  # performance
+  perf.train <- confusionMatrix(pred.train, Ytrain)
+  perf.test  <- confusionMatrix(pred.test, Ytest)
+  
+  # list of arguments
+  args <- list(Xtrain = Xtrain, Ytrain = Ytrain, Xtest = Xtest, Ytest = Ytest,
+               method = method, fun = fun, kern = kern,
+               tuneGrid = tuneGrid, cv = cv, segm = segm,
+               score = score, maximize = maximize, verbose = verbose, plot = plot)
+  
+  # list of model info
+  info <- list(call = match.call(), mode = "classification",
+               spec = "Kplsrda", engine = "rchemo", pkg_fun = paste0("rchemo_", method),
+               nSplit = data.frame(set = c("train","test","total"),
+                                   n   = c(nrow(Xtrain), nrow(Xtest),
+                                           nrow(Xtrain) + nrow(Xtest))),
+               nX = ncol(Xtrain), nTune = nrow(tuneGrid))
+  
+  # return results
+  t2 <- Sys.time()
+  res <- list(mod = mod, train = dd.train, info = info, notes = NA, plot = p,
+              pred.train = pred.train, pred.test = pred.test, 
+              perf.train = perf.train, perf.test = perf.test,
+              args = args, time = list(t1 = t1, t2 = t2, elapsed = t2 - t1))
+  res <- structure(res, class = "caret")
+  invisible(res)
+}
+
+# predict caret object where $mod is not class "train" but class "kplsrda" (own) and "Kplsrda" (rchemo)
+predict.kplsrda <- function(object, newdata = NULL, type = "class", transf = "raw", ...) {
+  
+  ## Arguments
+  # type      class or prob
+  # transf    if "raw", returns raw posterior probabilities (output of predict.Kplsrda)
+  #           if "softmax", transforms raw PP using the softmax function
+  #           if "unit", transforms raw PP by scaling them into [0,1]
+  
+  # check input
+  stopifnot(type %in% c("class","prob"),
+            transf %in% c("raw","softmax","unit"))
+  
+  levels <- if(!is.null(object$levels)) {
+    object$levels
+  } else if (!is.null(object$y)) {
+    levels(object$y)
+  } else if (!is.null(object$fm$C)) {
+    rownames(object$fm$C)
+  }
+  
+  switch(type,
+         "class" = {
+           out <- predict.Kplsrda(object, newdata, ...)$pred
+           factor(levels[out[,1]], levels = levels)
+         },
+         "prob" = {
+           prob <- predict.Kplsrda(object, newdata, ...)$posterior
+           colnames(prob) <- levels
+           
+           ## rescale prob to [0,1]
+           # https://rpubs.com/FJRubio/softmax
+           softmax <- function(par){
+             n.par <- length(par)
+             par1 <- sort(par, decreasing = TRUE)
+             Lk <- par1[1]
+             for (k in 1:(n.par-1)) {
+               Lk <- max(par1[k+1], Lk) + log1p(exp(-abs(par1[k+1] - Lk))) 
+             }
+             val <- exp(par - Lk)
+             return(val)
+           }
+           switch(transf,
+                  "raw" = {
+                    data.frame(prob, check.names = FALSE)
+                  },
+                  "softmax" = {
+                    data.frame(t(apply(prob, 1, softmax)), check.names = FALSE)
+                  },
+                  "unit" = {
+                    data.frame(t(apply(prob, 1, scales::rescale, to = c(0,1))), check.names = FALSE)
+                  })
+           
+         }
+  )
+}
+
+# print kplsrda object
+print.kplsrda <- function(object) {
+  
+  cat(paste0("Kernel Partial-Least-Squares Disciminant Analysis (", object$modelInfo$label, ")\n\n"))
+  
+  cat(paste0(length(object$levels), " classes:\n"))
+  print(object$levels)
+  
+  cat("\nBest tuning hyperparameters:\n")
+  print(object$bestTune)
+  
+}
+
+# train nlv and gamma in kernel (kplsrda) simultaneously
+train.dakpc <- function(Xtrain, Ytrain, Xtest, Ytest, kern = "krbf",
+                        tuneGrid = expand.grid(nlv = unique(c(1, seq(5, min(ncol(Xtrain), 300), by = 5))),
+                                               gamma = c(0.001, 0.01, seq(0.05, 0.5, by = 0.05), 1, seq(5, 50, by = 5))),
+                        metric = "Accuracy", verbose = TRUE, plot = TRUE,
+                        control = trainControl(method = "repeatedcv", number = 10, repeats = 1, search = "grid")) {
+  require(rchemo)
+  require(caret)
+  t1 <- Sys.time()
+  
+  # check input
+  stopifnot(inherits(Xtrain, c("matrix","data.frame")),
+            inherits(Xtest, c("matrix","data.frame")),
+            is.factor(Ytrain), length(Ytrain) == nrow(Xtrain),
+            is.factor(Ytest), length(Ytest) == nrow(Xtest),
+            kern %in% c("krbf","kpol","ktanh"),
+            is.data.frame(tuneGrid), all(c("nlv","gamma") %in% colnames(tuneGrid)),
+            is.numeric(tuneGrid$nlv), all(tuneGrid$nlv > 0), is.numeric(tuneGrid$gamma),
+            metric %in% c("Accuracy","Kappa","RMSE","Rsquared"),
+            is.list(control), all(c("method","number","repeats","search") %in% names(control)),
+            is.logical(verbose), is.logical(plot), is.function(caret))
+  
+  # get pc.range and gamma.range
+  pc.range <- sort(unique(tuneGrid$nlv))
+  gamma.range <- sort(unique(tuneGrid$gamma))
+  
+  # grid search
+  dd.gamma.train <- data.frame(array(NA, dim = c(0, 4)))
+  dd.gamma.test <- dd.gamma.train
+  for (gamma in gamma.range) {
+    pca.kern <- rchemo::kpca(Xtrain, weights = NULL, nlv = ncol(Xtrain), kern = kern, gamma = gamma)
+    pca.kern$test <- rchemo::transform(pca.kern, Xtest)
+    
+    for (npca in pc.range) {
+      if (verbose) cat(paste0("gamma: ", gamma, " ; pc 1:", npca, "\n"))
+      
+      # LDA in KPCA space
+      # set.seed(13981)
+      res <- try(caret(Xtrain = pca.kern$T[,1:npca,drop=F], Ytrain = Ytrain,
+                       Xtest = pca.kern$test[,1:npca,drop=F], Ytest = Ytest,
+                       method = "lda", metric = metric,
+                       trControl = control,
+                       print = FALSE, tuneGrid = expand.grid(parameter = "parameter")),
+                 silent = TRUE)
+      
+      # bind
+      if (!inherits(res, "try-error") & !all(is.na(res$perf.train))) {
+        dd.gamma.train <- rbind(dd.gamma.train,
+                                cbind(data.frame("nlv" = npca, "gamma" = gamma,
+                                                 t(res$perf.train$overall))))
+        dd.gamma.test <- rbind(dd.gamma.test,
+                               cbind(data.frame("nlv" = npca, "gamma" = gamma,
+                                                t(res$perf.test$overall))))
+      }
+    }
+  }
+  
+  # determine best according to training data
+  rbf.gamma <- dd.gamma.train[which.max(dd.gamma.train[,metric]),"gamma"]
+  rbf.npca <-  dd.gamma.train[which.max(dd.gamma.train[,metric]),"nlv"]
+  par.best <- data.frame(nlv = rbf.npca, gamma = rbf.gamma)
+  
+  # plot results
+  dd.gamma2 <- rbind(data.frame(dd.gamma.train, set = "train"),
+                     data.frame(dd.gamma.test, set = "test"))
+  dd.gamma2$set <- factor(dd.gamma2$set, levels = c("train", "test"))
+  rownames(dd.gamma2) <- NULL
+  
+  plot.gamma <- ggplot(dd.gamma2, aes_string(x = "nlv", y = metric, group = "gamma", color = "gamma")) +
+    geom_line() +
+    geom_vline(aes(xintercept = rbf.npca)) +
+    labs(x = "Number of retained PC", y = metric, color = paste0("gamma\n(", sub("^k", "", kern),  " kernel)")) +
+    facet_wrap(~set) +
+    theme_bw()
+  if (plot) print(plot.gamma)
+  
+  # fit final model 
+  iname <- paste0(paste(paste(names(par.best), as.numeric(unlist(par.best)), sep = "["), collapse = "];"), "]")
+  if (verbose) cat("Fitting", iname, "on full training set\n")
+  
+  pca.kern <- rchemo::kpca(Xtrain, weights = NULL, nlv = par.best$nlv, kern = kern, gamma = par.best$gamma)
+  pca.kern$test <- rchemo::transform(pca.kern, Xtest)
+  
+  mod <- try(caret(Xtrain = pca.kern$T, Ytrain = Ytrain, 
+                   Xtest = pca.kern$test, Ytest = Ytest, 
+                   method = "lda", metric = metric, trControl = control,
+                   print = FALSE, tuneGrid = tuneGrid),
+             silent = TRUE)
+  mod[["results"]] <- dd.gamma.train
+  mod[["results.test"]] <- dd.gamma.test
+  mod[["bestTune"]] <- par.best
+  
+  # list of arguments
+  args <- list(Xtrain = Xtrain, Ytrain = Ytrain, Xtest = Xtest, Ytest = Ytest,
+               method = "dakpc", kern = kern, tuneGrid = tuneGrid,
+               metric = metric, verbose = verbose, plot = plot, control = control)
+  
+  # list of model info
+  info <- list(call = match.call(), mode = "classification",
+               spec = "kpca", engine = "rchemo", pkg_fun = paste0("rchemo_", method),
+               nSplit = data.frame(set = c("train","test","total"),
+                                   n   = c(nrow(Xtrain), nrow(Xtest),
+                                           nrow(Xtrain) + nrow(Xtest))),
+               nX = ncol(Xtrain), nTune = nrow(tuneGrid))
+  
+  # return results
+  t2 <- Sys.time()
+  res <- list(mod = mod$mod, mod.tune = mod,
+              pred.train = mod$pred.train, pred.test = mod$pred.test,
+              perf.train = mod$perf.train, perf.test = mod$perf.test,
+              pca.kern = pca.kern,
+              plot = plot.gamma,
+              args = args, time = list(t1 = t1, t2 = t2, elapsed = t2 - t1))
+  res <- structure(res, class = "caret") # similar but not identical to true caret class
+  return(res)
+}
+
 
 
 ######################
