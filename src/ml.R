@@ -1804,7 +1804,7 @@ train.dakpc <- function(Xtrain, Ytrain, Xtest, Ytest, kern = "krbf",
   mod <- try(caret(Xtrain = pca.kern$T, Ytrain = Ytrain, 
                    Xtest = pca.kern$test, Ytest = Ytest, 
                    method = "lda", metric = metric, trControl = control,
-                   print = FALSE, tuneGrid = tuneGrid),
+                   print = FALSE, tuneGrid = expand.grid(parameter="parameter")),
              silent = TRUE)
   mod[["results"]] <- dd.gamma.train
   mod[["results.test"]] <- dd.gamma.test
