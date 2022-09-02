@@ -1235,7 +1235,7 @@ plot.caret <- function(caret, order = NULL,
                         }
                       },
                       "train" = {
-                        if (!is.list(caret$mod.tune)) {
+                        if (!is.list(caret$mod.tune$results)) {
                           results <- caret$mod$results # caret
                         } else {
                           results <- caret$mod.tune$results # caret dakpc
@@ -1806,9 +1806,9 @@ train.dakpc <- function(Xtrain, Ytrain, Xtest, Ytest, kern = "krbf",
                    method = "lda", metric = metric, trControl = control,
                    print = FALSE, tuneGrid = expand.grid(parameter="parameter")),
              silent = TRUE)
-  mod[["results"]] <- dd.gamma.train
-  mod[["results.test"]] <- dd.gamma.test
-  mod[["bestTune"]] <- par.best
+  mod$mod[["results"]] <- dd.gamma.train
+  mod$mod[["results.test"]] <- dd.gamma.test
+  mod$mod[["bestTune"]] <- par.best
   
   # list of arguments
   args <- list(Xtrain = Xtrain, Ytrain = Ytrain, Xtest = Xtest, Ytest = Ytest,
