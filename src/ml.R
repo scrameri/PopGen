@@ -1799,10 +1799,10 @@ train.dakpc <- function(Xtrain, Ytrain, Xtest, Ytest, kern = "krbf",
   if (verbose) cat("Fitting", iname, "on full training set\n")
   
   pca.kern <- rchemo::kpca(Xtrain, weights = NULL, nlv = par.best$nlv, kern = kern, gamma = par.best$gamma)
-  pca.kern$test <- rchemo::transform(pca.kern, Xtest)
+  pca.kern$Tt <- rchemo::transform(pca.kern, Xtest)
   
   mod <- try(caret(Xtrain = pca.kern$T, Ytrain = Ytrain, 
-                   Xtest = pca.kern$test, Ytest = Ytest, 
+                   Xtest = pca.kern$Tt, Ytest = Ytest, 
                    method = "lda", metric = metric, trControl = control,
                    print = FALSE, tuneGrid = expand.grid(parameter="parameter")),
              silent = TRUE)
