@@ -665,7 +665,7 @@ tidytune <- function(Xtrain, Ytrain, Xtest, Ytest, workflow, tuneGrid, folds,
   met_meta <- c(".metric",".estimator","mean","n","std_err",".config")
   
   ## Model fitting
-  totune <- nrow(tuneGrid) > 1 | any(sapply(mod$args, as_label) %in% "tune()")
+  totune <- nrow(tuneGrid) >= 1 | any(sapply(mod$args, as_label) %in% "tune()")
   if (totune) {
     
     ## Tune hyperparameters using tuneGrid, folds, metrics, trControl
@@ -713,13 +713,13 @@ tidytune <- function(Xtrain, Ytrain, Xtest, Ytest, workflow, tuneGrid, folds,
     
     ## Get best hyperparameter combination (consider select_by*)
     hpar <- colnames(tuneGrid)
-    met_train <- collect_metrics(fit_train) %>% # summarizes fit_train$.metric elements
-      dplyr::select(any_of(c(hpar, met_meta)))
+    met_train <- try(collect_metrics(fit_train) %>% # summarizes fit_train$.metric elements
+      dplyr::select(any_of(c(hpar, met_meta))), silent = TRUE)
     
     bestTune <- try(fit_train %>% select_best(metric.best) %>%
                       dplyr::select(any_of(c(hpar, met_meta))),
                     silent = TRUE)
-    if (inherits(bestTune, "try-error")) {
+    if (inherits(bestTune, "try-error") | inherits(met_train, "try-error")) {
       on.exit(return(fit_train))
       stop() 
     }
@@ -811,7 +811,7 @@ tidytune <- function(Xtrain, Ytrain, Xtest, Ytest, workflow, tuneGrid, folds,
   nTT <- sapply(list(train = s$in_id, test = s$out_id,
                      total = c(s$in_id, s$out_id)), length)
   t2 <- Sys.time()
-  res <- list(mod = fit_final$.workflow[[1]],
+  res <- list(mod = try(fit_final$.workflow[[1]], silent = T),
               train = fit_train,
               info = list(call = match.call(),
                           mode = mode, spec = spec, engine = engine, pkg_fun = pkg_fun,
