@@ -57,7 +57,7 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
                         write_results = FALSE, file.name = "EOO.results",
                         show.progress = FALSE, print = TRUE
 ) {
-
+  
   ## Arguments
   # sp          spatialPointsDataFrame
   # map.layers  list of data map layers. Each list element is a character vector of the form 
@@ -87,10 +87,10 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
   
   ## Value
   # an annotated interactive leaflet map. Can be saved as standalone .html using e.g. htmlwidgets::saveWidget().
-
+  
   ## Author(s)
   # sfcrameri@gmail.com, July 2022.
-    
+  
   
   ## Check input
   stopifnot(inherits(sp, "SpatialPointsDataFrame"),
@@ -218,7 +218,7 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
   z <- character()
   if (draw.polygons) {
     ask("ConR")
-
+    
     ALPHA <- rep(a, nlevels(sp@data[,colorfac]))
     names(ALPHA) <- levels(sp@data[,colorfac])
     if (!is.null(names(alpha))) {
@@ -238,9 +238,7 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
       XY <- data.frame(sp@coords[ids,c(2,1),drop=F], tax = sp@data[ids,colorfac])
       
       if (nrow(XY) < 3) {
-        da1 <- data.frame(t(apply(XY[,1:2], 2, jitter, amount = 0.001)), tax = class)
-        da2 <- data.frame(t(apply(XY[,1:2], 2, jitter, amount = 0.001)), tax = class)
-        XY <- rbind(XY, da1, da2)[1:3,]
+        data.frame(apply(XY[,c(1,2),drop=F], 2, jitter, amount = 0.001), tax = class)
         z <- c(z, class)
       }
       
@@ -251,6 +249,25 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
                                method.less.than3 = method.less.than3,
                                write_results = write_results, file.name = file.name,
                                show_progress = show.progress)
+      if (!paste0("spatial.polygon_", "1") %in% names(e)) {
+        pg <- SpatialPolygons(list(Polygons = Polygons(sapply(1:nrow(XY), function(x){
+          res <- matrix(c(XY[x, 2]+0.001, XY[x, 1]-0.001,
+                          XY[x, 2]+0.001, XY[x, 1]+0.001,
+                          XY[x, 2]-0.001, XY[x, 1]+0.001,
+                          XY[x, 2]-0.001, XY[x, 1]-0.001,
+                          XY[x, 2]+0.001, XY[x, 1]-0.001),  ## need to close the polygon
+                        ncol = 2, byrow = T)
+          ## create polygon objects
+          Polygon(res)
+        }), ID = "id")))
+        
+        # fix geometry issues related to single-observation polygons
+        if (!"cleangeo" %in% installed.packages()) devtools::install_github("eblondel/cleangeo")
+        pg <- cleangeo::clgeo_Clean(pg, verbose = F)
+        
+        e <- list(EOO = e)
+        e[[paste0("spatial.polygon_", "1")]] <- pg
+      }
       e[[paste0("spatial.polygon_", "1")]]@proj4string <- sp@proj4string
       names(e) <- c(paste0("EOO_", class), class)
       l <- c(l, e)
@@ -263,8 +280,9 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
       do.call(rbind, .)
     S <- SpatialPolygonsDataFrame(S, data = data.frame(Taxa = levels(sp@data[,colorfac])), match.ID = FALSE)
   }
+  
   if (length(z) > 0) {
-    message("Class(es) with single observation(s): ", paste(z, collapse = ", "))
+    message("Class(es) with single observation(s): ", paste(unique(z), collapse = ", "))
   }
   
   ## Add jittered points or polygons
@@ -292,7 +310,9 @@ get.leaflet <- function(sp, map.layers = NULL, idfac = NULL, colorfac = NULL, co
       if (draw.polygons) {
         M <- M %>%
           addPolygons(data = l[[layer]],
-                      color = pal(sp.layer@data[,colorfac]), fillColor = pal(sp.layer@data[,colorfac]),
+                      color = color.palette[which(levels(sp.layer@data[,colorfac]) == layer)],
+                      fillColor = color.palette[which(levels(sp.layer@data[,colorfac]) == layer)],
+                      # color = pal(sp.layer@data[,colorfac]), fillColor = pal(sp.layer@data[,colorfac]),
                       weight = weight, opacity = opacity, fillOpacity = fillOpacity, stroke = FALSE,
                       popup = get.popup(sp.layer, popup),
                       label = sp.layer@data[,layerfac],
