@@ -1,3 +1,12 @@
+# # debug
+# var.pop = "pop";
+# var.lon = "x"; var.lat = "y";
+# map = NULL; xlim = NULL; ylim = NULL;
+# repel.pie = 12; col.pies = NULL; alpha.pie = 1;
+# size.pie = 2; size.segement = 0.5; col.segment = "black";
+# size.label = 2; nudge.label.x = 0; nudge.label.y = 0;
+# plot = TRUE; legend.label = NULL; legend.pos = "bottom"
+
 piechart <- function(df, var.pies, var.pop = "pop",
                      var.lon = "x", var.lat = "y",
                      map = NULL, xlim = NULL, ylim = NULL,
@@ -10,9 +19,11 @@ piechart <- function(df, var.pies, var.pop = "pop",
   # Visualize frequency pie charts on a map using repelled coordinates.
   
   ## Arguments
-  # df            Input data.frame with one row per individual, containing variables specified
+  # df            Input data.frame with one row per individual (if var.pies is a single variable 
+  #               giving the majority cluster membership) or population (if var. pies is a vector
+  #               of variable names giving the admixture proportions), containing variables specified
   #               with <var.pies>, <var.pop>, <var.lon>, and <var.lat>.
-  # var.pies      Column name in <df> with group identifier (e.g. haplogroup).
+  # var.pies      Column name in <df> with major cluster membership (or haplogroup), or a vector of length > 1 giving the variables representing the admixture proportions.
   # var.pop       Column name in <df> with coordinate / population identifier. DEFAULT: "pop"
   # var.lon       Column name in <df> with longitude. DEFAULT: "x"
   # var.lat       Column name in <df> with latitude. DEFAULT: "y"
@@ -38,9 +49,11 @@ piechart <- function(df, var.pies, var.pop = "pop",
     remotes::install_github("hms-dbmi/repel")
   }
   if (!"scatterpie" %in% installed.packages()) install.packages("scatterpie")
+  if (!"dplyr" %in% installed.packages()) install.packages("dplyr")
   
   require(repel)
   require(scatterpie)
+  require(dplyr)
   
   ## Check input
   stopifnot(inherits(df, "data.frame"), var.pies %in% names(df),
@@ -51,18 +64,27 @@ piechart <- function(df, var.pies, var.pop = "pop",
   
   ## Get frequencies per population
   # factorize
-  fac <- df[,var.pies]
   pop <- df[,var.pop]
-  if (!is.factor(fac)) fac <- factor(as.character(fac))
-  if (!is.factor(pop)) pop <- factor(as.character(pop))
+  if (!is.factor(pop)) pop <- factor(as.character(pop)) else pop <- droplevels(pop)
   
-  # frequencies per population
-  xtab <- tapply(X = fac, INDEX = df[,var.pop],
-                 FUN = function(x) {
-                   data.frame(t(as.matrix(table(x)/length(na.omit(x)))))
-                 })
+  if (length(var.pies) == 1) {
+    fac <- df[,var.pies]
+    if (!is.factor(fac)) fac <- factor(as.character(fac)) else fac <- droplevels(fac)
+    
+    # frequencies per population
+    xtab <- tapply(X = fac, INDEX = pop,
+                   FUN = function(x) {
+                     data.frame(t(as.matrix(table(x)/length(na.omit(x)))), check.names = F)
+                   })
+  } else {
+    fac <- factor(var.pies, levels = var.pies)
+    
+    # frequencies per population
+    xtab <- lapply(df[,var.pop], function(x) df[df[,var.pop] == x,var.pies,drop=F])
+    names(xtab) <- df[,var.pop]
+  }
   
-  dpie <- data.frame(label = names(xtab), dplyr::bind_rows(xtab))
+  dpie <- data.frame(label = names(xtab), dplyr::bind_rows(xtab), check.names = FALSE)
   names(dpie)[1] <- var.pop
   dpie <- merge(unique(df[,c(var.pop, var.lon, var.lat)]), dpie, by = var.pop, all = T)
   
@@ -74,7 +96,7 @@ piechart <- function(df, var.pies, var.pop = "pop",
   
   # stopifnot(all.equal(dpie[,var.pop], repels[,"label"]))
   names(repels) <- c("x_repelled", "y_repelled", "label", "too_many_overlaps")
-  dpie <- data.frame(dpie, repels[,c("x_repelled", "y_repelled", "too_many_overlaps")])
+  dpie <- data.frame(dpie, repels[,c("x_repelled", "y_repelled", "too_many_overlaps")], check.names = FALSE)
   
   ## Set default arguments
   if (is.null(xlim)) {
